@@ -59,5 +59,5 @@ if __name__ == '__main__':
     domain = MockBoxInCabinetDomainHandlerClient()
 
     save_dir = Path('box_in_cabinet')
-    logging.info(f'Running tree and saving viz to {save_dir}')
+    logging.info(f'Running tree and saving viz to {save_dir}...')
     run_tree(tree, domain, save_dir=save_dir)
