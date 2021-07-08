@@ -1,7 +1,12 @@
 from abc import ABC, abstractmethod
+from typing import Tuple
 from enum import Enum
 
+from uuid import uuid4
+from pydot import Dot, Edge, Node
 from pillar_state import State
+
+from .utils import merge_graphs
 
 
 class BTStatus(Enum):
@@ -10,7 +15,25 @@ class BTStatus(Enum):
     FAILURE=2
 
 
-class FallBack:
+class BTNode(ABC):
+
+    @abstractmethod
+    def run(self, domain) -> BTStatus:
+        pass
+
+    @abstractmethod
+    def get_dot_graph(self) -> Tuple[Node, Dot]:
+        pass
+
+    def save_graph_vis(self, save_path):
+        _, graph = self.get_dot_graph()
+        graph.write_png(save_path)
+
+    def _create_dot_graph(self):
+        return Dot('BT', graph_type='digraph', splines=False)
+
+
+class FallBack(BTNode):
 
     def __init__(self, children):
         self._children = children
@@ -45,8 +68,20 @@ class FallBack:
             print(f'fallback yield failure')
             yield BTStatus.FAILURE
 
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+        this_node = Node(f'fallback_{uuid4()}', label='?', shape='square')
+        graph.add_node(this_node)
 
-class Sequence:
+        for child in self._children:
+            child_root_node, child_graph = child.get_dot_graph()
+            merge_graphs(graph, child_graph)
+            graph.add_edge(Edge(this_node, child_root_node))
+
+        return this_node, graph
+
+
+class Sequence(BTNode):
 
     def __init__(self, children):
         self._children = children
@@ -81,8 +116,20 @@ class Sequence:
             print(f'sequence success')
             yield BTStatus.SUCCESS
 
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+        this_node = Node(f'sequence_{uuid4()}', label='->', shape='square')
+        graph.add_node(this_node)
 
-class NegationDecorator:
+        for child in self._children:
+            child_root_node, child_graph = child.get_dot_graph()
+            merge_graphs(graph, child_graph)
+            graph.add_edge(Edge(this_node, child_root_node))
+
+        return this_node, graph
+
+
+class NegationDecorator(BTNode):
 
     def __init__(self, child):
         self._child = child
@@ -105,8 +152,19 @@ class NegationDecorator:
             else:
                 raise ValueError(f'Unknown status {status}')
 
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+        this_node = Node(f'negation_condition_{uuid4()}', label='!=', shape='diamond')
+        graph.add_node(this_node)
 
-class ConditionNode(ABC):
+        child_root_node, child_graph = self._child.get_dot_graph()
+        merge_graphs(graph, child_graph)
+        graph.add_edge(Edge(this_node, child_root_node))
+
+        return this_node, graph
+
+
+class ConditionNode(BTNode):
 
     @abstractmethod
     def _eval(self, state: State) -> bool:
@@ -123,6 +181,13 @@ class ConditionNode(ABC):
                 yield BTStatus.FAILURE
             break
 
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+        this_node = Node(f'condition_{uuid4()}', label=self.__class__.__name__, shape='ellipse')
+        graph.add_node(this_node)
+
+        return this_node, graph
+
 
 class SkillParamSelector(ABC):
 
@@ -131,7 +196,7 @@ class SkillParamSelector(ABC):
         pass
 
 
-class SkillNode:
+class SkillNode(BTNode):
 
     def __init__(self, skill_name, param_selector=None):
         self._skill_name = skill_name
@@ -161,6 +226,18 @@ class SkillNode:
                 break
             else:
                 raise ValueError(f'Unknown status {skill_exec_status}')
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+
+        param_str = self._param_selector.__class__.__name__
+        if param_str == 'function':
+            param_str = ''
+
+        this_node = Node(f'skill_{uuid4()}', label=f'{self._skill_name}({param_str})', shape='box')
+        graph.add_node(this_node)
+
+        return this_node, graph
 
 
 def run_tree(tree, domain):

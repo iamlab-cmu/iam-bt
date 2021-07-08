@@ -48,7 +48,7 @@ if __name__ == '__main__':
         ])
     ])
 
-    # print(tree)
+    tree.save_graph_vis('box_in_cabinet.png')
 
     domain = MockBoxInCabinetDomainHandlerClient()
     run_tree(tree, domain)
