@@ -1,33 +1,34 @@
 from abc import ABC, abstractmethod
-from typing import Tuple
-from enum import Enum
+from typing import Tuple, Generator
+import logging
 
-from uuid import uuid4
+from shortuuid import uuid
 from pydot import Dot, Edge, Node
 from pillar_state import State
 
+from .bt_status import BTStatus
 from .utils import merge_graphs
 
 
-class BTStatus(Enum):
-    RUNNING=0
-    SUCCESS=1
-    FAILURE=2
+logger = logging.getLogger(__name__)
 
 
 class BTNode(ABC):
 
+    def __init__(self):
+        self._uuid_str = f'{self.__class__.__name__}_{uuid()}'
+
+    @property
+    def uuid_str(self):
+        return self._uuid_str
+
     @abstractmethod
-    def run(self, domain) -> BTStatus:
+    def run(self, domain) -> Generator[Tuple['BTNode', BTStatus], None, None]:
         pass
 
     @abstractmethod
     def get_dot_graph(self) -> Tuple[Node, Dot]:
         pass
-
-    def save_graph_vis(self, save_path):
-        _, graph = self.get_dot_graph()
-        graph.write_png(save_path)
 
     def _create_dot_graph(self):
         return Dot('BT', graph_type='digraph', splines=False)
@@ -36,26 +37,28 @@ class BTNode(ABC):
 class FallBack(BTNode):
 
     def __init__(self, children):
+        super().__init__()
+        assert len(children) > 0
         self._children = children
 
     def run(self, domain):
-        print(f'run fallback')
+        logger.debug(f'run fallback')
 
         any_child_success = False
         for child in self._children:
             status_gen = child.run(domain)
             success = False
-            for status in status_gen:
+            for leaf_node, status in status_gen:
                 if status == BTStatus.RUNNING:
-                    print(f'fallback yield running')
-                    yield BTStatus.RUNNING
+                    logger.debug(f'fallback yield running')
+                    yield leaf_node, BTStatus.RUNNING
                 elif status == BTStatus.SUCCESS:
-                    print(f'fallback yield success')
-                    yield BTStatus.SUCCESS
+                    logger.debug(f'fallback yield success')
+                    yield leaf_node, BTStatus.SUCCESS
                     success = True
                     break
                 elif status == BTStatus.FAILURE:
-                    print(f'fallback failed, moving on')
+                    logger.debug(f'fallback failed, moving on')
                     break
                 else:
                     raise ValueError(f'Unknown status {status}')
@@ -65,12 +68,12 @@ class FallBack(BTNode):
                 break
 
         if not any_child_success:
-            print(f'fallback yield failure')
-            yield BTStatus.FAILURE
+            logger.debug(f'fallback yield failure')
+            yield leaf_node, BTStatus.FAILURE
 
     def get_dot_graph(self):
         graph = self._create_dot_graph()
-        this_node = Node(f'fallback_{uuid4()}', label='?', shape='square')
+        this_node = Node(self._uuid_str, label='?', shape='square')
         graph.add_node(this_node)
 
         for child in self._children:
@@ -84,25 +87,27 @@ class FallBack(BTNode):
 class Sequence(BTNode):
 
     def __init__(self, children):
+        super().__init__()
+        assert len(children) > 0
         self._children = children
 
     def run(self, domain):
-        print('run sequence')
+        logger.debug('run sequence')
         
         any_child_failure = False
         for child in self._children:
             status_gen = child.run(domain)
             failure = False
-            for status in status_gen:
+            for leaf_node, status in status_gen:
                 if status == BTStatus.RUNNING:
-                    print(f'sequence running')
-                    yield BTStatus.RUNNING
+                    logger.debug(f'sequence running')
+                    yield leaf_node, BTStatus.RUNNING
                 elif status == BTStatus.SUCCESS:
-                    print(f'sequence success, moving on')
+                    logger.debug(f'sequence success, moving on')
                     break
                 elif status == BTStatus.FAILURE:
-                    print(f'sequence failure')
-                    yield BTStatus.FAILURE
+                    logger.debug(f'sequence failure')
+                    yield leaf_node, BTStatus.FAILURE
                     failure = True
                     break
                 else:
@@ -113,12 +118,12 @@ class Sequence(BTNode):
                 break
 
         if not any_child_failure:
-            print(f'sequence success')
-            yield BTStatus.SUCCESS
+            logger.debug(f'sequence success')
+            yield leaf_node, BTStatus.SUCCESS
 
     def get_dot_graph(self):
         graph = self._create_dot_graph()
-        this_node = Node(f'sequence_{uuid4()}', label='->', shape='square')
+        this_node = Node(self._uuid_str, label='->', shape='square')
         graph.add_node(this_node)
 
         for child in self._children:
@@ -132,29 +137,30 @@ class Sequence(BTNode):
 class NegationDecorator(BTNode):
 
     def __init__(self, child):
+        super().__init__()
         self._child = child
 
     def run(self, domain):
-        print('run negation')
+        logger.debug('run negation')
         status_gen = self._child.run(domain)
-        for status in status_gen:
+        for leaf_node, status in status_gen:
             if status == BTStatus.RUNNING:
-                print('negation yield running')
-                yield BTStatus.RUNNING
+                logger.debug('negation yield running')
+                yield leaf_node, BTStatus.RUNNING
             elif status == BTStatus.SUCCESS:
-                print('negation yield failure (got success)')
-                yield BTStatus.FAILURE
+                logger.debug('negation yield failure (got success)')
+                yield leaf_node, BTStatus.FAILURE
                 break
             elif status == BTStatus.FAILURE:
-                print('negation yield success (got success)')
-                yield BTStatus.SUCCESS
+                logger.debug('negation yield success (got success)')
+                yield leaf_node, BTStatus.SUCCESS
                 break
             else:
                 raise ValueError(f'Unknown status {status}')
 
     def get_dot_graph(self):
         graph = self._create_dot_graph()
-        this_node = Node(f'negation_condition_{uuid4()}', label='!=', shape='diamond')
+        this_node = Node(self._uuid_str, label='!=', shape='diamond')
         graph.add_node(this_node)
 
         child_root_node, child_graph = self._child.get_dot_graph()
@@ -171,34 +177,28 @@ class ConditionNode(BTNode):
         pass
 
     def run(self, domain):
-        print(f'run condition {self.__class__.__name__}')
+        logger.debug(f'run condition {self.__class__.__name__}')
         while True:
             if self._eval(domain.state):
-                print('yield success')
-                yield BTStatus.SUCCESS
+                logger.debug('yield success')
+                yield self, BTStatus.SUCCESS
             else:
-                print('yield failure')
-                yield BTStatus.FAILURE
+                logger.debug('yield failure')
+                yield self, BTStatus.FAILURE
             break
 
     def get_dot_graph(self):
         graph = self._create_dot_graph()
-        this_node = Node(f'condition_{uuid4()}', label=self.__class__.__name__, shape='ellipse')
+        this_node = Node(self._uuid_str, label=self.__class__.__name__, shape='ellipse')
         graph.add_node(this_node)
 
         return this_node, graph
 
 
-class SkillParamSelector(ABC):
-
-    @abstractmethod
-    def __call__(self, state: State) -> str:
-        pass
-
-
 class SkillNode(BTNode):
 
     def __init__(self, skill_name, param_selector=None):
+        super().__init__()
         self._skill_name = skill_name
 
         if param_selector is None:
@@ -210,19 +210,19 @@ class SkillNode(BTNode):
         param = self._param_selector(domain.state)
         skill_id = domain.run_skill(self._skill_name, param)
         
-        print(f'running skill with {self._skill_name} on {skill_id}')
+        logger.debug(f'running skill with {self._skill_name} on {skill_id}')
         while True:
             skill_exec_status = domain.get_skill_exec_status(skill_id)
             if skill_exec_status == 'running':
-                print('skill running')
-                yield BTStatus.RUNNING
+                logger.debug('skill running')
+                yield self, BTStatus.RUNNING
             elif skill_exec_status == 'success':
-                print('skill success')
-                yield BTStatus.SUCCESS
+                logger.debug('skill success')
+                yield self, BTStatus.SUCCESS
                 break
             elif skill_exec_status == 'failure':
-                print('skill failure')
-                yield BTStatus.FAILURE
+                logger.debug('skill failure')
+                yield self, BTStatus.FAILURE
                 break
             else:
                 raise ValueError(f'Unknown status {skill_exec_status}')
@@ -234,13 +234,14 @@ class SkillNode(BTNode):
         if param_str == 'function':
             param_str = ''
 
-        this_node = Node(f'skill_{uuid4()}', label=f'{self._skill_name}({param_str})', shape='box')
+        this_node = Node(self._uuid_str, label=f'{self._skill_name}({param_str})', shape='box')
         graph.add_node(this_node)
 
         return this_node, graph
 
 
-def run_tree(tree, domain):
-    status_gen = tree.run(domain)
-    for status in status_gen:
-        print('run tree', status)
+class SkillParamSelector(ABC):
+
+    @abstractmethod
+    def __call__(self, state: State) -> str:
+        pass
