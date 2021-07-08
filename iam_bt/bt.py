@@ -33,6 +33,9 @@ class BTNode(ABC):
     def _create_dot_graph(self):
         return Dot('BT', graph_type='digraph', splines=False)
 
+    def __str__(self):
+        return self._uuid_str
+
 
 class FallBack(BTNode):
 
