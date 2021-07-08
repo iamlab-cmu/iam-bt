@@ -23,7 +23,7 @@ class BTNode(ABC):
         return self._uuid_str
 
     @abstractmethod
-    def run(self, domain) -> Generator[Tuple['BTNode', BTStatus], None, None]:
+    def run(self, domain) -> Generator[Tuple['BTNode', BTStatus, BTStatus], None, None]:
         pass
 
     @abstractmethod
@@ -48,17 +48,18 @@ class FallBack(BTNode):
         for child in self._children:
             status_gen = child.run(domain)
             success = False
-            for leaf_node, status in status_gen:
+            for leaf_node, leaf_status, status in status_gen:
                 if status == BTStatus.RUNNING:
                     logger.debug(f'fallback yield running')
-                    yield leaf_node, BTStatus.RUNNING
+                    yield leaf_node, leaf_status, BTStatus.RUNNING
                 elif status == BTStatus.SUCCESS:
                     logger.debug(f'fallback yield success')
-                    yield leaf_node, BTStatus.SUCCESS
                     success = True
+                    yield leaf_node, leaf_status, BTStatus.SUCCESS
                     break
                 elif status == BTStatus.FAILURE:
                     logger.debug(f'fallback failed, moving on')
+                    yield leaf_node, leaf_status, BTStatus.RUNNING
                     break
                 else:
                     raise ValueError(f'Unknown status {status}')
@@ -69,7 +70,7 @@ class FallBack(BTNode):
 
         if not any_child_success:
             logger.debug(f'fallback yield failure')
-            yield leaf_node, BTStatus.FAILURE
+            yield leaf_node, leaf_status, BTStatus.FAILURE
 
     def get_dot_graph(self):
         graph = self._create_dot_graph()
@@ -98,17 +99,18 @@ class Sequence(BTNode):
         for child in self._children:
             status_gen = child.run(domain)
             failure = False
-            for leaf_node, status in status_gen:
+            for leaf_node, leaf_status, status in status_gen:
                 if status == BTStatus.RUNNING:
                     logger.debug(f'sequence running')
-                    yield leaf_node, BTStatus.RUNNING
+                    yield leaf_node, leaf_status, BTStatus.RUNNING
                 elif status == BTStatus.SUCCESS:
                     logger.debug(f'sequence success, moving on')
+                    yield leaf_node, leaf_status, BTStatus.RUNNING
                     break
                 elif status == BTStatus.FAILURE:
                     logger.debug(f'sequence failure')
-                    yield leaf_node, BTStatus.FAILURE
                     failure = True
+                    yield leaf_node, leaf_status, BTStatus.FAILURE
                     break
                 else:
                     raise ValueError(f'Unknown status {status}')
@@ -119,7 +121,7 @@ class Sequence(BTNode):
 
         if not any_child_failure:
             logger.debug(f'sequence success')
-            yield leaf_node, BTStatus.SUCCESS
+            yield leaf_node, leaf_status, BTStatus.SUCCESS
 
     def get_dot_graph(self):
         graph = self._create_dot_graph()
@@ -143,17 +145,17 @@ class NegationDecorator(BTNode):
     def run(self, domain):
         logger.debug('run negation')
         status_gen = self._child.run(domain)
-        for leaf_node, status in status_gen:
+        for leaf_node, leaf_status, status in status_gen:
             if status == BTStatus.RUNNING:
                 logger.debug('negation yield running')
-                yield leaf_node, BTStatus.RUNNING
+                yield leaf_node, leaf_status, BTStatus.RUNNING
             elif status == BTStatus.SUCCESS:
                 logger.debug('negation yield failure (got success)')
-                yield leaf_node, BTStatus.FAILURE
+                yield leaf_node, leaf_status, BTStatus.FAILURE
                 break
             elif status == BTStatus.FAILURE:
                 logger.debug('negation yield success (got success)')
-                yield leaf_node, BTStatus.SUCCESS
+                yield leaf_node, leaf_status, BTStatus.SUCCESS
                 break
             else:
                 raise ValueError(f'Unknown status {status}')
@@ -181,10 +183,10 @@ class ConditionNode(BTNode):
         while True:
             if self._eval(domain.state):
                 logger.debug('yield success')
-                yield self, BTStatus.SUCCESS
+                yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
             else:
                 logger.debug('yield failure')
-                yield self, BTStatus.FAILURE
+                yield self, BTStatus.FAILURE, BTStatus.FAILURE
             break
 
     def get_dot_graph(self):
@@ -215,14 +217,14 @@ class SkillNode(BTNode):
             skill_exec_status = domain.get_skill_exec_status(skill_id)
             if skill_exec_status == 'running':
                 logger.debug('skill running')
-                yield self, BTStatus.RUNNING
+                yield self, BTStatus.RUNNING, BTStatus.RUNNING
             elif skill_exec_status == 'success':
                 logger.debug('skill success')
-                yield self, BTStatus.SUCCESS
+                yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
                 break
             elif skill_exec_status == 'failure':
                 logger.debug('skill failure')
-                yield self, BTStatus.FAILURE
+                yield self, BTStatus.FAILURE, BTStatus.FAILURE
                 break
             else:
                 raise ValueError(f'Unknown status {skill_exec_status}')

@@ -17,20 +17,19 @@ def run_tree(tree, domain, save_dir=None):
 
     status_gen = tree.run(domain)
     tick = 0
-    for leaf_bt_node, status in status_gen:
+    for leaf_bt_node, leaf_status, _ in status_gen:
         tick += 1
 
         if save_dir is not None:
             leaf_dot_node = graph.get_node(leaf_bt_node.uuid_str)[0]
-            if status == BTStatus.RUNNING:
+            if leaf_status == BTStatus.RUNNING:
                 leaf_dot_node.set_color('goldenrod4')
-            elif status == BTStatus.SUCCESS:
+            elif leaf_status == BTStatus.SUCCESS:
                 leaf_dot_node.set_color('green')
-            elif status == BTStatus.FAILURE:
+            elif leaf_status == BTStatus.FAILURE:
                 leaf_dot_node.set_color('red')
             
             img_path = save_dir / f'{tick:010d}.png'
-            graph.set_title(f'BT Tick: {tick}')
             graph.write_png(img_path)         
 
             leaf_dot_node.set_color('black')
