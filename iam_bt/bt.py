@@ -218,7 +218,7 @@ class SkillNode(BTNode):
         
         logger.debug(f'{self} running skill with {self._skill_name} on {skill_id}')
         while True:
-            skill_exec_status = domain.get_skill_exec_status(skill_id)
+            skill_exec_status = domain.get_skill_status(skill_id)
             if skill_exec_status == 'running':
                 logger.debug(f'{self} to yield running')
                 yield self, BTStatus.RUNNING, BTStatus.RUNNING

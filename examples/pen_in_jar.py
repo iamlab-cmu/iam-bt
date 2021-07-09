@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 
 from iam_bt.bt import FallBack, Sequence, NegationDecorator, ConditionNode, SkillParamSelector, SkillNode
-from iam_bt.mock_domain import MockPenInJarDomainHandlerClient
+from iam_bt.mock_domain import MockPenInJarDomainClient
 from iam_bt.utils import run_tree
 
 
@@ -40,7 +40,7 @@ if __name__ == '__main__':
     ])
 
     logging.info('Creating mock domain')
-    domain = MockPenInJarDomainHandlerClient()
+    domain = MockPenInJarDomainClient()
 
     save_dir = Path('pen_in_jar')
     logging.info(f'Running tree and saving viz to {save_dir}...')

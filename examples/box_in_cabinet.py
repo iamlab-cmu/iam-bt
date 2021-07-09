@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 
 from iam_bt.bt import FallBack, Sequence, NegationDecorator, ConditionNode, SkillParamSelector, SkillNode
-from iam_bt.mock_domain import MockBoxInCabinetDomainHandlerClient
+from iam_bt.mock_domain import MockBoxInCabinetDomainClient
 from iam_bt.utils import run_tree
 
 
@@ -56,7 +56,7 @@ if __name__ == '__main__':
     ])
 
     logging.info('Creating mock domain')
-    domain = MockBoxInCabinetDomainHandlerClient()
+    domain = MockBoxInCabinetDomainClient()
 
     save_dir = Path('box_in_cabinet')
     logging.info(f'Running tree and saving viz to {save_dir}...')

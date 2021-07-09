@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from pillar_state import State
 
 
-class BaseMockDomainHandlerClient(ABC):
+class BaseMockDomainClient(ABC):
 
     def __init__(self):
         self._state = self._make_init_state()
@@ -39,20 +39,12 @@ class BaseMockDomainHandlerClient(ABC):
 
         return skill_id
 
-    @property
-    def current_skill_id(self):
-        return self._current_skill_id
-
-    @property
-    def current_skill_info(self):
-        return self._skill_dict[self.current_skill_id]
-
-    def get_skill_exec_status(self, skill_id):
+    def get_skill_status(self, skill_id):
         self._mock_tick()
         return self._skill_dict[skill_id]['status']
 
 
-class MockBoxInCabinetDomainHandlerClient(BaseMockDomainHandlerClient):
+class MockBoxInCabinetDomainClient(BaseMockDomainClient):
 
     def _make_init_state(self):
         state = State()
@@ -64,7 +56,7 @@ class MockBoxInCabinetDomainHandlerClient(BaseMockDomainHandlerClient):
     def _mock_tick(self):
         self._tick_count += 1
 
-        skill_info = self.current_skill_info
+        skill_info = self._skill_dict[self._current_skill_id]
         skill_status = skill_info['status']
         skill_start_tick = skill_info['start_tick']
         skill_name = skill_info['skill_name']
@@ -89,7 +81,7 @@ class MockBoxInCabinetDomainHandlerClient(BaseMockDomainHandlerClient):
                     self._skill_dict[skill_id]['status'] = 'success'        
 
 
-class MockPenInJarDomainHandlerClient(BaseMockDomainHandlerClient):
+class MockPenInJarDomainClient(BaseMockDomainClient):
 
     def _make_init_state(self):
         state = State()
@@ -99,7 +91,7 @@ class MockPenInJarDomainHandlerClient(BaseMockDomainHandlerClient):
     def _mock_tick(self):
         self._tick_count += 1
 
-        skill_info = self.current_skill_info
+        skill_info = self._skill_dict[self._current_skill_id]
         skill_status = skill_info['status']
         skill_start_tick = skill_info['start_tick']
         skill_name = skill_info['skill_name']
