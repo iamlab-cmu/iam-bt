@@ -218,20 +218,20 @@ class SkillNode(BTNode):
         
         logger.debug(f'{self} running skill with {self._skill_name} on {skill_id}')
         while True:
-            skill_exec_status = domain.get_skill_status(skill_id)
-            if skill_exec_status == 'running':
+            skill_status = domain.get_skill_status(skill_id)
+            if skill_status in ('running', 'registered'):
                 logger.debug(f'{self} to yield running')
                 yield self, BTStatus.RUNNING, BTStatus.RUNNING
-            elif skill_exec_status == 'success':
+            elif skill_status == 'success':
                 logger.debug(f'{self} to yield success')
                 yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
                 break
-            elif skill_exec_status == 'failure':
+            elif skill_status == 'failure':
                 logger.debug(f'{self} to yield failure')
                 yield self, BTStatus.FAILURE, BTStatus.FAILURE
                 break
             else:
-                raise ValueError(f'Unknown status {skill_exec_status}')
+                raise ValueError(f'Unknown status {skill_status}')
 
     def get_dot_graph(self):
         graph = self._create_dot_graph()
