@@ -1,3 +1,4 @@
+import sys 
 import logging
 from pathlib import Path
 
@@ -25,7 +26,13 @@ class MovePenAboveJarParamSelector(SkillParamSelector):
 
 
 if __name__ == '__main__':
-    logging.getLogger().setLevel(logging.INFO)
+    logging.getLogger().setLevel(logging.DEBUG)
+
+    fh = logging.FileHandler('pen_in_jar.log', 'w+')
+    fh.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(levelname)s - {%(filename)s:%(funcName)s:%(lineno)d} - %(message)s')
+    fh.setFormatter(formatter)
+    logging.getLogger().addHandler(fh)
 
     logging.info('Creating tree')
     tree = FallBack([

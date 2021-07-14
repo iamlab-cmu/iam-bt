@@ -36,6 +36,74 @@ class BTNode(ABC):
     def __str__(self):
         return self._uuid_str
 
+class While(BTNode):
+    def __init__(self, children):
+        super().__init__()
+        assert len(children) == 2
+        self._condition_child = children[0]
+        self._action_child = children[1]
+    
+    def run(self, domain):
+        logger.debug(f'run {self}')
+        while True:
+            condition_success = False
+            status_gen = self._condition_child.run(domain)
+            for leaf_node, leaf_status, status in status_gen:
+                if status == BTStatus.RUNNING:
+                    logger.debug(f'{self} to yield running b/c condition_child {leaf_node} yielded running')
+                    yield leaf_node, leaf_status, BTStatus.RUNNING
+                elif status == BTStatus.SUCCESS:
+                    logger.debug(f'{self} to yield success b/c {leaf_node} yielded success')
+                    condition_success = True
+                    yield leaf_node, leaf_status, BTStatus.RUNNING
+                    break
+                elif status == BTStatus.FAILURE:
+                    logger.debug(f'{self} to yield success b/c {leaf_node} yielded failure')
+                    yield leaf_node, leaf_status, BTStatus.FAILURE
+                    break
+                else:
+                    raise ValueError(f'Unknown status {status}')
+
+            if not condition_success:
+                logger.debug(f'while failure b/c condition_child failure')
+                yield leaf_node, leaf_status, BTStatus.FAILURE
+                break
+
+            status_gen = self._action_child.run(domain)
+            success = False
+            for leaf_node, leaf_status, status in status_gen:
+                if status == BTStatus.RUNNING:
+                    logger.debug(f'{self} to yield running b/c {leaf_node} yielded running')
+                    yield leaf_node, leaf_status, BTStatus.RUNNING
+                elif status == BTStatus.SUCCESS:
+                    logger.debug(f'{self} to yield success b/c {leaf_node} yielded success')
+                    success = True
+                    yield leaf_node, leaf_status, BTStatus.RUNNING
+                    break
+                elif status == BTStatus.FAILURE:
+                    logger.debug(f'{self} to yield failure b/c {leaf_node} yielded failure')
+                    yield leaf_node, leaf_status, BTStatus.FAILURE
+                    break
+                else:
+                    raise ValueError(f'Unknown status {status}')
+
+            if not success:
+                logger.debug(f'while failure b/c action_child failure')
+                yield leaf_node, leaf_status, BTStatus.FAILURE
+                break
+    
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+        this_node = Node(self._uuid_str, label='...', shape='diamond')
+        graph.add_node(this_node)
+
+        for child in [self._condition_child, self._action_child]:
+            child_root_node, child_graph = child.get_dot_graph()
+            merge_graphs(graph, child_graph)
+            graph.add_edge(Edge(this_node, child_root_node))
+
+        return this_node, graph
+
 
 class FallBack(BTNode):
 
@@ -239,6 +307,44 @@ class SkillNode(BTNode):
         param_str = self._param_selector.__class__.__name__
         if param_str == 'function':
             param_str = ''
+
+        this_node = Node(self._uuid_str, label=f'{self._skill_name}({param_str})', shape='box')
+        graph.add_node(this_node)
+
+        return this_node, graph
+
+class QueryNode(BTNode):
+
+    def __init__(self, skill_name):
+        super().__init__()
+        self._skill_name = skill_name
+
+    def run(self, domain):
+        skill_id = domain.run_query_skill(self._skill_name, None)
+        
+        logger.debug(f'{self} running query skill with {self._skill_name} on {skill_id}')
+        while True:
+            skill_status = domain.get_query_skill_status(skill_id)
+            if skill_status in ('running', 'registered'):
+                logger.debug(f'{self} to yield running')
+                yield self, BTStatus.RUNNING, BTStatus.RUNNING
+            elif skill_status == 'success':
+                logger.debug(f'{self} to yield success')
+                yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
+                break
+            elif skill_status == 'failure':
+                logger.debug(f'{self} to yield failure')
+                yield self, BTStatus.FAILURE, BTStatus.FAILURE
+                break
+            else:
+                raise ValueError(f'Unknown status {skill_status}')
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+
+        # param_str = self._param_selector.__class__.__name__
+        # if param_str == 'function':
+        param_str = ''
 
         this_node = Node(self._uuid_str, label=f'{self._skill_name}({param_str})', shape='box')
         graph.add_node(this_node)
