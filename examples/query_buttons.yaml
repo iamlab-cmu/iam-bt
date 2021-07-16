@@ -1,0 +1,7 @@
+buttons: 
+  - 
+    name : grasp_button
+    text : Execute Grasp Skill
+  -
+    name : move_ee_to_pose_button
+    text : Execute Move EE to Pose Skill

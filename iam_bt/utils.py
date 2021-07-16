@@ -10,7 +10,7 @@ def merge_graphs(base_graph, new_graph):
     return base_graph
 
 
-def run_tree(tree, domain, save_dir=None):
+def run_tree(tree, domain, save_dir=None, skip_running_nodes=True):
     if save_dir is not None:
         save_dir.mkdir(parents=True, exist_ok=True)
         _, graph = tree.get_dot_graph()
@@ -23,7 +23,10 @@ def run_tree(tree, domain, save_dir=None):
         if save_dir is not None:
             leaf_dot_node = graph.get_node(leaf_bt_node.uuid_str)[0]
             if leaf_status == BTStatus.RUNNING:
-                leaf_dot_node.set_color('goldenrod4')
+                if skip_running_nodes:
+                    continue
+                else:
+                    leaf_dot_node.set_color('goldenrod4')
             elif leaf_status == BTStatus.SUCCESS:
                 leaf_dot_node.set_color('green')
             elif leaf_status == BTStatus.FAILURE:

@@ -1,3 +1,4 @@
+import json
 from abc import ABC, abstractmethod
 from typing import Tuple, Generator
 import logging
@@ -14,6 +15,20 @@ logger = logging.getLogger(__name__)
 
 
 class BTNode(ABC):
+    # Corresponding information we want to store internally inside the BT
+    blackboard = {
+        # "buttons" : {},
+        # "sliders" : {},
+        # "bboxes" : [],
+        # "text_inputs" : [],
+        # "instruction_text" : [],
+        # "camera_topic" : [],
+        # "display_type" : [],
+        # "traj1" : [],
+        # "traj2" : [],
+        # "robot" : [],
+        # "robot_joint_topic" : [],
+    }
 
     def __init__(self):
         self._uuid_str = f'{self.__class__.__name__}_{uuid()}'
@@ -114,7 +129,6 @@ class FallBack(BTNode):
 
     def run(self, domain):
         logger.debug(f'run {self}')
-
         any_child_success = False
         for child in self._children:
             status_gen = child.run(domain)
@@ -282,6 +296,8 @@ class SkillNode(BTNode):
 
     def run(self, domain):
         param = self._param_selector(domain.state)
+        trajs = domain.get_skill_traj(self._skill_name, param)
+        
         skill_id = domain.run_skill(self._skill_name, param)
         
         logger.debug(f'{self} running skill with {self._skill_name} on {skill_id}')
@@ -313,13 +329,124 @@ class SkillNode(BTNode):
 
         return this_node, graph
 
+class GetSkillTrajNode(BTNode):
+
+    def __init__(self, skill_name, param_selector=None):
+        super().__init__()
+        self._skill_name = skill_name
+
+        if param_selector is None:
+            self._param_selector = lambda _ : ''
+        else:
+            self._param_selector = param_selector
+
+    def run(self, domain):
+        param = self._param_selector(domain.state)
+        skill_status = domain.get_skill_traj(self._skill_name, param)
+        
+        logger.debug(f'{self} getting skill trajectory with {self._skill_name}')
+        while True:
+            if domain.state.has_prop('skill_trajectory_done') and domain.state.has_prop('skill_trajectory'):
+                skill_status = 'success' if domain.state['skill_trajectory_done'][0] > 0 else 'running'
+            else:
+                skill_status = 'running'
+            
+            if skill_status in ('running', 'registered'):
+                logger.debug(f'{self} to yield running')
+                yield self, BTStatus.RUNNING, BTStatus.RUNNING
+            elif skill_status == 'success':
+                logger.debug(f'{self} to yield success')
+                self.blackboard['skill_trajectory'] += domain.state["skill_trajectory"]
+                yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
+                break
+            elif skill_status == 'failure':
+                logger.debug(f'{self} to yield failure')
+                yield self, BTStatus.FAILURE, BTStatus.FAILURE
+                break
+            else:
+                raise ValueError(f'Unknown status {skill_status}')
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+
+        param_str = self._param_selector.__class__.__name__
+        if param_str == 'function':
+            param_str = ''
+
+        this_node = Node(self._uuid_str, label=f'{self._skill_name}({param_str})', shape='box')
+        graph.add_node(this_node)
+
+        return this_node, graph
+
+class ResolveQueryNode(BTNode):
+
+    def __init__(self, query_name, query_param, resolve_fields=[]):
+        super().__init__()
+        self._query_name = query_name
+        self._query_param = query_param
+        self._resolve_fields = resolve_fields if resolve_fields is not [] else list(query_param.keys())
+
+    def run(self, domain):
+        logger.debug(f'{self} running resolving query {self._query_name} with query name: {self._query_name}')  
+        while True:
+            query_status = 'success'
+            for field in self.__resolve_fields:
+                if not domain.state.has_prop(f"{field}_value"):
+                    query_status = 'running'
+                    continue
+                
+                v = self._query_param[field]
+                state_values = domain.state[f"{field}_value"]
+                print(state_values)
+                idx = 0
+                for vi in v:
+                    if 'name' in vi:
+                        self.blackboard[vi['name']] = state_values[idx]
+                        idx += 1
+                if idx != len(state_values)-1:
+                    query_status = 'running'
+
+            if query_status == 'running':
+                logger.debug(f'{self} to yield running')
+                yield self, BTStatus.RUNNING, BTStatus.RUNNING
+            elif query_status == 'success':
+                logger.debug(f'{self} to yield success')
+                yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
+                break
+            elif query_status == 'failure':
+                logger.debug(f'{self} to yield failure')
+                yield self, BTStatus.FAILURE, BTStatus.FAILURE
+                break
+            else:
+                raise ValueError(f'Unknown status {query_status}')
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+
+        import json 
+        param_dict = json.loads(self._query_param)
+        param_str = '-'.join(list(param_dict.keys()))
+
+        this_node = Node(self._uuid_str, label=param_str, shape='box')
+        graph.add_node(this_node)
+
+        return this_node, graph
+
+
 class QueryNode(BTNode):
 
     def __init__(self, query_name, query_param):
         super().__init__()
         self._query_name = query_name
         self._query_param = query_param
-
+        param_dict = json.loads(self._query_param)
+        for k,v in param_dict.items():
+            if type(v) is not list:
+                continue
+            else:
+                for vi in v:
+                    if 'name' in vi:
+                        self.blackboard[vi['name']] = None
     def run(self, domain):
         query_id = domain.run_query(self._query_name, self._query_param)
         

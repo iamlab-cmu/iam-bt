@@ -73,11 +73,11 @@ if __name__ == '__main__':
             FallBack([
                 Sequence([
                     ButtonPushedConditionNode(0),
-                    SkillNode('grasp'),
+                    SkillNode('grasp', GraspPenParamSelector()),
                 ]),
                 Sequence([
                     ButtonPushedConditionNode(1),
-                    SkillNode('move_ee_to_pose'),
+                    SkillNode('move_ee_to_pose', MovePenAboveJarParamSelector()),
                 ]),
             ])
         ])
