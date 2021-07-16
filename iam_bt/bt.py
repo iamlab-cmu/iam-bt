@@ -343,6 +343,9 @@ class GetSkillTrajNode(BTNode):
     def run(self, domain):
         param = self._param_selector(domain.state)
         skill_status = domain.get_skill_traj(self._skill_name, param)
+        traj_list = self.blackboard.get("trajectories", [])
+        traj_list.append(domain.state['skill_trajectory'])
+        self.blackboard['trajectories'] = traj_list
         
         logger.debug(f'{self} getting skill trajectory with {self._skill_name}')
         while True:
@@ -373,33 +376,25 @@ class GetSkillTrajNode(BTNode):
 
         return this_node, graph
 
-class ResolveQueryNode(BTNode):
+class ResolveButtonNode(BTNode):
 
-    def __init__(self, query_name, query_param, resolve_fields=[]):
+    def __init__(self, query_name, query_param):
         super().__init__()
         self._query_name = query_name
         self._query_param = query_param
-        self._resolve_fields = resolve_fields if resolve_fields is not [] else list(query_param.keys())
 
     def run(self, domain):
         logger.debug(f'{self} running resolving query {self._query_name} with query name: {self._query_name}')  
         while True:
             query_status = 'success'
-            for field in self.__resolve_fields:
-                if not domain.state.has_prop(f"{field}_value"):
-                    query_status = 'running'
-                    continue
-                
-                v = self._query_param[field]
-                state_values = domain.state[f"{field}_value"]
-                print(state_values)
-                idx = 0
-                for vi in v:
-                    if 'name' in vi:
-                        self.blackboard[vi['name']] = state_values[idx]
-                        idx += 1
-                if idx != len(state_values)-1:
-                    query_status = 'running'
+            v = self._query_param["buttons"]
+            state_values = domain.state["buttons_value"]
+            idx = 0
+            for vi in v:
+                self.blackboard[vi['name']] = state_values[idx] > 0
+                idx += 1
+            if idx != len(state_values)-1:
+                query_status = 'running'
 
             if query_status == 'running':
                 logger.debug(f'{self} to yield running')

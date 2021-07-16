@@ -4,7 +4,7 @@ import yaml
 import logging
 from pathlib import Path
 
-from iam_bt.bt import QueryNode, While, FallBack, Sequence, NegationDecorator, ConditionNode, SkillParamSelector, SkillNode, GetSkillTrajNode, ResolveQueryNode
+from iam_bt.bt import QueryNode, While, FallBack, Sequence, NegationDecorator, ConditionNode, SkillParamSelector, SkillNode, GetSkillTrajNode, ResolveButtonNode
 from iam_bt.utils import run_tree, assign_unique_name
 from iam_domain_handler.domain_client import DomainClient 
 
@@ -46,7 +46,7 @@ if __name__ == '__main__':
     query_button_tree = QueryNode('query_buttons', json.dumps(query_param_dict))
     simple_tree = Sequence([
         query_button_tree,
-        ResolveQueryNode('query_buttons', json.dumps(query_param_dict), resolve_fields=["buttons"]),
+        ResolveButtonNode('query_buttons', json.dumps(query_param_dict)),
         FallBack([
             ButtonPushedConditionNode(query_param_dict["buttons"][0]['name']),
             ButtonPushedConditionNode(query_param_dict["buttons"][1]['name']),
