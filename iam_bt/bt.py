@@ -346,12 +346,7 @@ class GetSkillTrajNode(BTNode):
         
         logger.debug(f'{self} getting skill trajectory with {self._skill_name}')
         while True:
-            if domain.state.has_prop('skill_trajectory_done') and domain.state.has_prop('skill_trajectory'):
-                skill_status = 'success' if domain.state['skill_trajectory_done'][0] > 0 else 'running'
-            else:
-                skill_status = 'running'
-            
-            if skill_status in ('running', 'registered'):
+            if skill_status in ('running'):
                 logger.debug(f'{self} to yield running')
                 yield self, BTStatus.RUNNING, BTStatus.RUNNING
             elif skill_status == 'success':
