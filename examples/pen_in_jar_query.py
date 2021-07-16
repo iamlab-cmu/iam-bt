@@ -1,10 +1,11 @@
 import sys 
+import json
 import logging
 from pathlib import Path
 
 from iam_bt.bt import QueryNode, While, FallBack, Sequence, NegationDecorator, ConditionNode, SkillParamSelector, SkillNode
 from iam_bt.mock_domain_query import MockPenInJarWithQueryDomainClient
-from iam_bt.utils import run_tree
+from iam_bt.utils import run_tree, assign_unique_name
 
 
 class ButtonPushedConditionNode(ConditionNode):
@@ -46,48 +47,8 @@ if __name__ == '__main__':
     logging.getLogger().addHandler(fh)
 
     logging.info('Creating tree')
-
-    query_params = {
-        'buttons' : [],
-        'sliders' : [],
-        'instruction_text' : '',
-        'camera' : '',
-        'display_type' : 0,
-        'traj1' : [],
-        'traj2' : [],
-        'robot' : '',
-        'robot_joint_topic' : '',
-    }
-    query_params = {
-        'buttons' : [
-            {
-                'name' : 'grasp_button',
-                'text' : 'Execute Grasp Skill',
-            },
-            {
-                'name' : 'move_ee_to_pose_button',
-                'text' : 'Execute Move EE to Pose Skill',
-            },
-        ]
-    }
-
-    # Display button and click
-    simple_tree = Sequence([
-        QueryNode('simple_query', query_params),
-        FallBack([
-            Sequence([
-                ButtonPushedConditionNode(0),
-                SkillNode('grasp'),
-            ]),
-            Sequence([
-                ButtonPushedConditionNode(1),
-                SkillNode('move_ee_to_pose'),
-            ]),
-        ])
-    ])
-
     
-    query_params = {
+    query_param_dict = {
         'buttons' : [
             {
                 'name' : 'grasp_button',
@@ -103,11 +64,12 @@ if __name__ == '__main__':
             },
         ]
     }
+    query_param_dict = assign_unique_name(query_param_dict)
 
     simple_tree = While([
         NegationDecorator(ButtonPushedConditionNode(2)),
         Sequence([
-            QueryNode(' ', query_params),
+            QueryNode(' ', json.dumps(query_param_dict)),
             FallBack([
                 Sequence([
                     ButtonPushedConditionNode(0),

@@ -343,7 +343,9 @@ class QueryNode(BTNode):
     def get_dot_graph(self):
         graph = self._create_dot_graph()
 
-        param_str = '-'.join(list(self._query_param.keys()))
+        import json 
+        param_dict = json.loads(self._query_param)
+        param_str = '-'.join(list(param_dict.keys()))
 
         this_node = Node(self._uuid_str, label=param_str, shape='box')
         graph.add_node(this_node)

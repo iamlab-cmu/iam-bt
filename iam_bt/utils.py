@@ -34,8 +34,20 @@ def run_tree(tree, domain, save_dir=None):
 
             leaf_dot_node.set_color('black')
 
-# def from_skill_name_to_button(skill_name):
-#     return {
-#         'name' : '{}_{}_button'.format(skill_name, uuid()),
-#         'text' : 'Execute Skill: {}'.format(skill_name),
-#     }
+def assign_unique_name(param_dict):
+    '''
+    
+    '''
+    for k,v in param_dict.items():
+        if type(v) is list:
+            new_v = []
+            for vi in v:
+                if type(vi) is not dict:
+                    continue
+                if 'name' in vi:
+                    vi['name'] = '{}_{}'.format(vi['name'], uuid())
+                new_v.append(vi)
+                
+            param_dict[k] = new_v
+            
+    return param_dict

@@ -1,3 +1,4 @@
+import json
 import numpy as np
 from abc import ABC, abstractmethod
 from pillar_state import State
@@ -85,6 +86,9 @@ class MockPenInJarWithQueryDomainClient(BaseMockDomainClient):
         params = skill_info['param']
         skill_id = skill_info['skill_id']
         button_clicked_idx = skill_info['click_this_button']
+
+        if type(params) is str:
+            params = json.loads(params)
         
         if "buttons" in params:
             buttons = params['buttons']
