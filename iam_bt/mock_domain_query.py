@@ -77,7 +77,7 @@ class MockPenInJarWithQueryDomainClient(BaseMockDomainClient):
     def _make_init_state(self):
         state = State()
         state['frame:pen:pose/position'] = [0.1, 0, 0]
-        state['last_button_pushed'] = [-1]
+        state['clicked_button_index'] = [-1]
         return state
     
     def mock_process_human_interface_request(self, skill_info):
@@ -95,7 +95,7 @@ class MockPenInJarWithQueryDomainClient(BaseMockDomainClient):
             if self._tick_count > 50:
                 print(self._tick_count)
                 self._query_skill_dict[skill_id]['status'] = 'success'
-                self._state['last_button_pushed'] = [-1]
+                self._state['clicked_button_index'] = [-1]
                 return
 
             if button_clicked_idx is None:
@@ -106,7 +106,7 @@ class MockPenInJarWithQueryDomainClient(BaseMockDomainClient):
                 
             if self._tick_count > skill_start_tick + 3:
                 self._query_skill_dict[skill_id]['status'] = 'success'
-                self._state['last_button_pushed'] = [button_idx]
+                self._state['clicked_button_index'] = [button_idx]
                 
         
     def _mock_tick(self, is_query=False):

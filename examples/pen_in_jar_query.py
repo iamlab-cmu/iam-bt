@@ -16,7 +16,7 @@ class ButtonPushedConditionNode(ConditionNode):
         self.button_idx = button_idx
 
     def _eval(self, state):
-        return state['last_button_pushed'][0] == self.button_idx
+        return state['clicked_button_index'][0] == self.button_idx
 
 
 class PenOnTableConditionNode(ConditionNode):
