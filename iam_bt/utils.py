@@ -1,5 +1,5 @@
 from .bt_status import BTStatus
-
+from shortuuid import uuid
 
 def merge_graphs(base_graph, new_graph):
     for node in new_graph.get_nodes():
@@ -33,3 +33,9 @@ def run_tree(tree, domain, save_dir=None):
             graph.write_png(img_path)         
 
             leaf_dot_node.set_color('black')
+
+# def from_skill_name_to_button(skill_name):
+#     return {
+#         'name' : '{}_{}_button'.format(skill_name, uuid()),
+#         'text' : 'Execute Skill: {}'.format(skill_name),
+#     }

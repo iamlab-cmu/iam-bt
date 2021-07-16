@@ -53,12 +53,12 @@ class While(BTNode):
                     logger.debug(f'{self} to yield running b/c condition_child {leaf_node} yielded running')
                     yield leaf_node, leaf_status, BTStatus.RUNNING
                 elif status == BTStatus.SUCCESS:
-                    logger.debug(f'{self} to yield success b/c {leaf_node} yielded success')
+                    logger.debug(f'{self} to yield running b/c {leaf_node} yielded success')
                     condition_success = True
                     yield leaf_node, leaf_status, BTStatus.RUNNING
                     break
                 elif status == BTStatus.FAILURE:
-                    logger.debug(f'{self} to yield success b/c {leaf_node} yielded failure')
+                    logger.debug(f'{self} to yield failure b/c {leaf_node} yielded failure')
                     yield leaf_node, leaf_status, BTStatus.FAILURE
                     break
                 else:
@@ -76,7 +76,7 @@ class While(BTNode):
                     logger.debug(f'{self} to yield running b/c {leaf_node} yielded running')
                     yield leaf_node, leaf_status, BTStatus.RUNNING
                 elif status == BTStatus.SUCCESS:
-                    logger.debug(f'{self} to yield success b/c {leaf_node} yielded success')
+                    logger.debug(f'{self} to yield running b/c {leaf_node} yielded success')
                     success = True
                     yield leaf_node, leaf_status, BTStatus.RUNNING
                     break
@@ -129,7 +129,7 @@ class FallBack(BTNode):
                     yield leaf_node, leaf_status, BTStatus.SUCCESS
                     break
                 elif status == BTStatus.FAILURE:
-                    logger.debug(f'{self} to yield failure b/c {leaf_node} yielded failure')
+                    logger.debug(f'{self} to yield running b/c {leaf_node} yielded failure')
                     yield leaf_node, leaf_status, BTStatus.RUNNING
                     break
                 else:
@@ -175,7 +175,7 @@ class Sequence(BTNode):
                     logger.debug(f'{self} to yield running b/c {leaf_node} yielded running')
                     yield leaf_node, leaf_status, BTStatus.RUNNING
                 elif status == BTStatus.SUCCESS:
-                    logger.debug(f'{self} to yield success b/c {leaf_node} yielded success')
+                    logger.debug(f'{self} to yield running b/c {leaf_node} yielded success')
                     yield leaf_node, leaf_status, BTStatus.RUNNING
                     break
                 elif status == BTStatus.FAILURE:
@@ -315,38 +315,37 @@ class SkillNode(BTNode):
 
 class QueryNode(BTNode):
 
-    def __init__(self, skill_name):
+    def __init__(self, query_name, query_param):
         super().__init__()
-        self._skill_name = skill_name
+        self._query_name = query_name
+        self._query_param = query_param
 
     def run(self, domain):
-        skill_id = domain.run_query_skill(self._skill_name, None)
+        query_id = domain.run_query(self._query_name, self._query_param)
         
-        logger.debug(f'{self} running query skill with {self._skill_name} on {skill_id}')
+        logger.debug(f'{self} running query {self._query_name} with id: {query_id}') #{self._query_name} 
         while True:
-            skill_status = domain.get_query_skill_status(skill_id)
-            if skill_status in ('running', 'registered'):
+            query_status = domain.get_query_status(query_id)
+            if query_status in ('running', 'registered'):
                 logger.debug(f'{self} to yield running')
                 yield self, BTStatus.RUNNING, BTStatus.RUNNING
-            elif skill_status == 'success':
+            elif query_status == 'success':
                 logger.debug(f'{self} to yield success')
                 yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
                 break
-            elif skill_status == 'failure':
+            elif query_status == 'failure':
                 logger.debug(f'{self} to yield failure')
                 yield self, BTStatus.FAILURE, BTStatus.FAILURE
                 break
             else:
-                raise ValueError(f'Unknown status {skill_status}')
+                raise ValueError(f'Unknown status {query_status}')
 
     def get_dot_graph(self):
         graph = self._create_dot_graph()
 
-        # param_str = self._param_selector.__class__.__name__
-        # if param_str == 'function':
-        param_str = ''
+        param_str = '-'.join(list(self._query_param.keys()))
 
-        this_node = Node(self._uuid_str, label=f'{self._skill_name}({param_str})', shape='box')
+        this_node = Node(self._uuid_str, label=param_str, shape='box')
         graph.add_node(this_node)
 
         return this_node, graph
