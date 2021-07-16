@@ -76,7 +76,7 @@ class MockPenInJarWithQueryDomainClient(BaseMockDomainClient):
     def _make_init_state(self):
         state = State()
         state['frame:pen:pose/position'] = [0.1, 0, 0]
-        state['last_button_pushed'] = ['']
+        state['last_button_pushed'] = [-1]
         return state
     
     def mock_process_human_interface_request(self, skill_info):
@@ -85,28 +85,24 @@ class MockPenInJarWithQueryDomainClient(BaseMockDomainClient):
         params = skill_info['param']
         skill_id = skill_info['skill_id']
         button_clicked_idx = skill_info['click_this_button']
+        
         if "buttons" in params:
             buttons = params['buttons']
             if self._tick_count > 50:
                 print(self._tick_count)
                 self._query_skill_dict[skill_id]['status'] = 'success'
-                self._state['last_button_pushed'] = ['stop_button']
+                self._state['last_button_pushed'] = [-1]
                 return
 
             if button_clicked_idx is None:
                 button_idx = np.random.choice(list(np.arange(len(buttons))))
                 skill_info['click_this_button'] = button_idx
-                # print(button_idx)
             else:
-                button_idx = button_clicked_idx
-
+                button_idx = skill_info['click_this_button']
+                
             if self._tick_count > skill_start_tick + 3:
                 self._query_skill_dict[skill_id]['status'] = 'success'
-                for i, button in enumerate(params['buttons']):
-                    if i != button_idx:
-                        self._state['last_button_pushed'] = [button['name']] 
-                    else:
-                        self._state['last_button_pushed'] = [button['name']] 
+                self._state['last_button_pushed'] = [button_idx]
                 
         
     def _mock_tick(self, is_query=False):

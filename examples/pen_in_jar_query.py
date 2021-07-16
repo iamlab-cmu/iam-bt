@@ -4,15 +4,18 @@ from pathlib import Path
 
 from iam_bt.bt import QueryNode, While, FallBack, Sequence, NegationDecorator, ConditionNode, SkillParamSelector, SkillNode
 from iam_bt.mock_domain_query import MockPenInJarWithQueryDomainClient
+from iam_bt.utils import run_tree
+
 
 class ButtonPushedConditionNode(ConditionNode):
 
-    def __init__(self, button_name):
+    def __init__(self, button_idx):
         super().__init__()
-        self.button_name = button_name
+        # self.button_name = button_name
+        self.button_idx = button_idx
 
     def _eval(self, state):
-        return state['last_button_pushed'][0] == self.button_name
+        return state['last_button_pushed'][0] == self.button_idx
 
 
 class PenOnTableConditionNode(ConditionNode):
@@ -73,11 +76,11 @@ if __name__ == '__main__':
         QueryNode('simple_query', query_params),
         FallBack([
             Sequence([
-                ButtonPushedConditionNode('grasp_button'),
+                ButtonPushedConditionNode(0),
                 SkillNode('grasp'),
             ]),
             Sequence([
-                ButtonPushedConditionNode('move_ee_to_pose_button'),
+                ButtonPushedConditionNode(1),
                 SkillNode('move_ee_to_pose'),
             ]),
         ])
@@ -102,16 +105,16 @@ if __name__ == '__main__':
     }
 
     simple_tree = While([
-        NegationDecorator(ButtonPushedConditionNode('stop_button')),
+        NegationDecorator(ButtonPushedConditionNode(2)),
         Sequence([
             QueryNode(' ', query_params),
             FallBack([
                 Sequence([
-                    ButtonPushedConditionNode('grasp_button'),
+                    ButtonPushedConditionNode(0),
                     SkillNode('grasp'),
                 ]),
                 Sequence([
-                    ButtonPushedConditionNode('grasp_button'),
+                    ButtonPushedConditionNode(1),
                     SkillNode('move_ee_to_pose'),
                 ]),
             ])
