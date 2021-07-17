@@ -346,7 +346,6 @@ class GetSkillTrajNode(BTNode):
         traj_list = self.blackboard.get("trajectories", [])
         traj_list.append(domain.state['skill_trajectory'])
         self.blackboard['trajectories'] = traj_list
-        
         logger.debug(f'{self} getting skill trajectory with {self._skill_name}')
         while True:
             if skill_status in ('running'):
@@ -354,7 +353,6 @@ class GetSkillTrajNode(BTNode):
                 yield self, BTStatus.RUNNING, BTStatus.RUNNING
             elif skill_status == 'success':
                 logger.debug(f'{self} to yield success')
-                self.blackboard['skill_trajectory'] += domain.state["skill_trajectory"]
                 yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
                 break
             elif skill_status == 'failure':

@@ -6,3 +6,5 @@ buttons:
   -
     name : move_ee_to_pose_button
     text : Execute Move EE to Pose Skill
+traj1:
+traj2:
