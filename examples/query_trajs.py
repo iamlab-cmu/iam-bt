@@ -32,7 +32,7 @@ if __name__ == '__main__':
     simple_tree = Sequence([
         GetSkillTrajNode('stay_in_place', GraspPenParamSelector()),
         GetSkillTrajNode('stay_in_place', GraspPenParamSelector()),
-        # QueryNode('query_trajs', json.dumps(query_param_dict))
+        QueryNode('query_trajs', json.dumps(query_param_dict)),
     ])
     
     logging.info('Creating mock domain')

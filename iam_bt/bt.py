@@ -422,18 +422,18 @@ class QueryNode(BTNode):
         super().__init__()
         self._query_name = query_name
         self._query_param = query_param
-        param_dict = json.loads(self._query_param)
-        for k,v in param_dict.items():
-            if type(v) is not list:
-                continue
-            else:
-                for vi in v:
-                    if 'name' in vi:
-                        self.blackboard[vi['name']] = None
+
     def run(self, domain):
+        param_dict = json.loads(self._query_param)
+        if "traj1" in param_dict:
+            assert "traj2" in param_dict
+            assert len(self.blackboard["trajectories"]) == 2
+            param_dict["traj1"] = self.blackboard["trajectories"][-2]
+            param_dict["traj2"] = self.blackboard["trajectories"][-1]
+        self._query_param = json.dumps(param_dict)
+
         query_id = domain.run_query(self._query_name, self._query_param)
-        
-        logger.debug(f'{self} running query {self._query_name} with id: {query_id}') #{self._query_name} 
+        logger.debug(f'{self} running query {self._query_name} with id: {query_id}') 
         while True:
             query_status = domain.get_query_status(query_id)
             if query_status in ('running', 'registered'):
