@@ -58,4 +58,4 @@ if __name__ == '__main__':
 
     save_dir = Path('pen_in_jar_traj')
     logging.info(f'Running tree and saving viz to {save_dir}...')
-    run_tree(query_button_tree, domain, save_dir=save_dir)
+    run_tree(simple_tree, domain, save_dir=save_dir)

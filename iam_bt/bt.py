@@ -387,13 +387,13 @@ class ResolveButtonNode(BTNode):
         logger.debug(f'{self} running resolving query {self._query_name} with query name: {self._query_name}')  
         while True:
             query_status = 'success'
-            v = self._query_param["buttons"]
+            v = json.loads(self._query_param)["buttons"]
             state_values = domain.state["buttons_value"]
             idx = 0
             for vi in v:
                 self.blackboard[vi['name']] = state_values[idx] > 0
                 idx += 1
-            if idx != len(state_values)-1:
+            if idx != len(state_values):
                 query_status = 'running'
 
             if query_status == 'running':
@@ -412,12 +412,7 @@ class ResolveButtonNode(BTNode):
 
     def get_dot_graph(self):
         graph = self._create_dot_graph()
-
-        import json 
-        param_dict = json.loads(self._query_param)
-        param_str = '-'.join(list(param_dict.keys()))
-
-        this_node = Node(self._uuid_str, label=param_str, shape='box')
+        this_node = Node(self._uuid_str, label='Resolve buttons', shape='box')
         graph.add_node(this_node)
 
         return this_node, graph
