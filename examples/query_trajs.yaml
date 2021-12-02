@@ -1,0 +1,10 @@
+display_type: 1
+buttons: 
+  - 
+    name : trajectory_choice_1
+    text : Choose Trajecotory 1
+  -
+    name : trajectory_choice_2
+    text : Choose Trajecotory 2
+traj1:
+traj2:
