@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 class BTNode(ABC):
     # Corresponding information we want to store internally inside the BT
     blackboard = {
+        'true' : True
         # "buttons" : {},
         # "sliders" : {},
         # "bboxes" : [],
@@ -486,6 +487,9 @@ class QueryNode(BTNode):
         self._query_param = query_param
 
     def run(self, domain):
+        if 'display_type' in self._query_param.keys() and self._query_param['display_type'] == 3:
+            if self._query_param['bokeh_display_type'] == 1:
+                self._query_param['bokeh_image'] = self.blackboard['image'].tolist()
 
         query_id = domain.run_query(self._query_name, json.dumps(self._query_param))
         logger.debug(f'{self} running query {self._query_name} with id: {query_id}') 
@@ -526,6 +530,7 @@ class SaveImageNode(BTNode):
         (image_request_success, image_path) = domain.save_rgb_camera_image(self._camera_topic_name) 
         while True:
             if image_request_success:
+                self.blackboard['image_path'] = image_path
                 logger.debug(f'{self} to yield success')
                 yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
             else: 
@@ -537,6 +542,37 @@ class SaveImageNode(BTNode):
         graph = self._create_dot_graph()
 
         param_str = 'save_rgb_camera_image-'+self._camera_topic_name
+
+        this_node = Node(self._uuid_str, label=param_str, shape='box')
+        graph.add_node(this_node)
+
+        return this_node, graph
+
+class GetImageNode(BTNode):
+
+    def __init__(self):
+        super().__init__()
+
+    def run(self, domain):
+
+        (image_request_success, image_path, image) = domain.get_rgb_image()
+        print(image_request_success)
+        print(image_path)
+        while True:
+            if image_request_success:
+                self.blackboard['image'] = image
+                self.blackboard['image_path'] = image_path
+                logger.debug(f'{self} to yield success')
+                yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
+            else: 
+                logger.debug(f'{self} to yield failure')
+                yield self, BTStatus.FAILURE, BTStatus.FAILURE
+            break
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+
+        param_str = 'get_rgb_image'
 
         this_node = Node(self._uuid_str, label=param_str, shape='box')
         graph.add_node(this_node)

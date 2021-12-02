@@ -4,7 +4,7 @@ import yaml
 import logging
 from pathlib import Path
 
-from iam_bt.bt import QueryNode, While, FallBack, Sequence, NegationDecorator, ConditionNode, SkillParamSelector, SkillNode, GetSkillTrajNode, ResolveQueryNode, SaveImageNode
+from iam_bt.bt import QueryNode, While, FallBack, Sequence, NegationDecorator, ConditionNode, SkillParamSelector, SkillNode, GetSkillTrajNode, ResolveQueryNode, SaveImageNode, GetImageNode
 from iam_bt.utils import run_tree, assign_unique_name
 from iam_domain_handler.domain_client import DomainClient 
 
@@ -17,6 +17,15 @@ class ButtonPushedConditionNode(ConditionNode):
     def _eval(self, state):
         return self._state_field_name in self.blackboard['query_response']['button_inputs'].keys() \
                and self.blackboard['query_response']['button_inputs'][self._state_field_name] > 0
+
+class BoolConditionNode(ConditionNode):
+
+    def __init__(self, state_field_name):
+        super().__init__()
+        self._state_field_name = state_field_name
+
+    def _eval(self, state):
+        return self.blackboard[self._state_field_name]
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(logging.INFO)
@@ -68,7 +77,7 @@ if __name__ == '__main__':
     execute_dmp_skill_tree = Sequence([ButtonPushedConditionNode('Execute DMP Skill'),
                                       ])
 
-    save_images_1_query_params = {
+    save_images_query_params = {
         'instruction_text' : 'Press Save when you want to save images. Else press Done when you have finished.',
         'buttons' : [
             {
@@ -83,22 +92,37 @@ if __name__ == '__main__':
     }
 
     save_images_skill_tree = Sequence([ButtonPushedConditionNode('Save Images'),
-                                       QueryNode('save_images_1', save_images_1_query_params),
-                                       ResolveQueryNode('save_images_1', save_images_1_query_params),
+                                       QueryNode('save_images', save_images_query_params),
+                                       ResolveQueryNode('save_images', save_images_query_params),
                                        While([ButtonPushedConditionNode('Save'), 
                                               Sequence([SaveImageNode('/rgb/image_raw'),
-                                                        QueryNode('save_images_n', save_images_1_query_params),
-                                                        ResolveQueryNode('save_images_n', save_images_1_query_params)])
+                                                        QueryNode('save_images', save_images_query_params),
+                                                        ResolveQueryNode('save_images', save_images_query_params)])
                                              ])
                                       ])
 
+    label_images_query_params = {
+        'instruction_text' : 'Label the image. Press submit when you are done labeling an image.',
+        'display_type' : 3,
+        'bokeh_display_type' : 1
+    }
+
     label_images_skill_tree = Sequence([ButtonPushedConditionNode('Label Images'),
+                                        GetImageNode(),
+                                        QueryNode('label_image', label_images_query_params),
+                                        ResolveQueryNode('label_image', label_images_query_params),
+                                        While([BoolConditionNode('request_next_image'), 
+                                               Sequence([GetImageNode(),
+                                                         QueryNode('label_image', label_images_query_params),
+                                                         ResolveQueryNode('label_image', label_images_query_params)])
+                                              ])
                                        ])
 
     select_point_goals_tree = Sequence([ButtonPushedConditionNode('Select Point Goals'),
                                        ])
 
-    main_menu_tree = Sequence([
+    main_menu_tree = While([BoolConditionNode('true'),
+        Sequence([
         QueryNode('main_menu', main_menu_query_params),
         ResolveQueryNode('main_menu', main_menu_query_params),
         FallBack([
@@ -109,7 +133,7 @@ if __name__ == '__main__':
             label_images_skill_tree,
             select_point_goals_tree,
         ])
-    ])
+    ])])
     
     logging.info('Creating mock domain')
     domain = DomainClient()
