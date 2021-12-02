@@ -374,7 +374,7 @@ class GetSkillTrajNode(BTNode):
 
         return this_node, graph
 
-class ResolveButtonNode(BTNode):
+class ResolveQueryNode(BTNode):
 
     def __init__(self, query_name, query_param):
         super().__init__()
@@ -385,14 +385,76 @@ class ResolveButtonNode(BTNode):
         logger.debug(f'{self} running resolving query {self._query_name} with query name: {self._query_name}')  
         while True:
             query_status = 'success'
-            v = json.loads(self._query_param)["buttons"]
-            state_values = domain.state["buttons_value"]
-            idx = 0
-            for vi in v:
-                self.blackboard[vi['name']] = state_values[idx] > 0
-                idx += 1
-            if idx != len(state_values):
+
+            query_response = {}
+            has_buttons = ('buttons' in self._query_param.keys())
+            has_sliders = ('sliders' in self._query_param.keys())
+            has_text_inputs = ('text_inputs' in self._query_param.keys())
+            has_dmp_params = ('bokeh_display_type' in self._query_param.keys() and self._query_param['bokeh_display_type'] == 0)
+            label_image = ('bokeh_display_type' in self._query_param.keys() and self._query_param['bokeh_display_type'] == 1)
+            has_points = ('bokeh_display_type' in self._query_param.keys() and self._query_param['bokeh_display_type'] == 2)
+
+            query_complete = True
+
+            if has_buttons:
+                button_inputs = domain.get_memory_objects(['buttons'])['buttons']
+                for button in self._query_param['buttons']:
+                    if button['name'] not in button_inputs.keys():
+                        query_complete = False
+                        continue
+                query_response['button_inputs'] = button_inputs
+            if has_sliders:
+                sliders = domain.get_memory_objects(['sliders'])['sliders']
+                for slider in self._query_param['sliders']:
+                    if slider['name'] not in sliders.keys():
+                        query_complete = False
+                        continue
+                query_response['sliders'] = sliders
+            if has_text_inputs:
+                text_inputs = domain.get_memory_objects(['text_inputs'])['text_inputs']
+                for text_input in self._query_param['text_inputs']:
+                    if text_input['name'] not in text_inputs.keys():
+                        query_complete = False
+                        continue
+                query_response['text_inputs'] = text_inputs
+            if has_dmp_params:
+                dmp_info = domain.get_memory_objects(['dmp_params'])['dmp_params']
+                dmp_params = {}
+                quat_dmp_params = {}
+                dmp_params['dmp_type'] = dmp_info.dmp_type
+                dmp_params['tau'] = dmp_info.tau
+                dmp_params['alpha'] = dmp_info.alpha
+                dmp_params['beta'] = dmp_info.beta
+                dmp_params['num_dims'] = dmp_info.num_dims
+                dmp_params['num_basis'] = dmp_info.num_basis
+                dmp_params['num_sensors'] = dmp_info.num_sensors
+                dmp_params['mu'] = dmp_info.mu
+                dmp_params['h'] = dmp_info.h
+                dmp_params['phi_j'] = dmp_info.phi_j
+                dmp_params['weights'] = np.array(dmp_info.weights).reshape((dmp_info.num_dims,dmp_info.num_sensors,dmp_info.num_basis)).tolist()
+                if dmp_info.dmp_type == 0:
+                    quat_dmp_params['tau'] = dmp_info.quat_tau
+                    quat_dmp_params['alpha'] = dmp_info.quat_alpha
+                    quat_dmp_params['beta'] = dmp_info.quat_beta
+                    quat_dmp_params['num_dims'] = dmp_info.quat_num_dims
+                    quat_dmp_params['num_basis'] = dmp_info.quat_num_basis
+                    quat_dmp_params['num_sensors'] = dmp_info.quat_num_sensors
+                    quat_dmp_params['mu'] = dmp_info.quat_mu
+                    quat_dmp_params['h'] = dmp_info.quat_h
+                    quat_dmp_params['phi_j'] = dmp_info.quat_phi_j
+                    quat_dmp_params['weights'] = np.array(dmp_info.quat_weights).reshape((dmp_info.quat_num_dims,dmp_info.quat_num_sensors,dmp_info.quat_num_basis)).tolist()
+                    dmp_params['quat_dmp_params'] = quat_dmp_params
+                query_response['dmp_params'] = dmp_params
+            if label_image:
+                query_response = domain.get_memory_objects(['request_next_image', 'object_names', 'masks', 'bounding_boxes'])
+            if has_points:
+                query_response = domain.get_memory_objects(['object_names', 'desired_positions'])
+
+            if not query_complete:
                 query_status = 'running'
+            else:
+                self.blackboard['query_response'] = query_response
+                domain.clear_human_inputs()
 
             if query_status == 'running':
                 logger.debug(f'{self} to yield running')
@@ -410,7 +472,7 @@ class ResolveButtonNode(BTNode):
 
     def get_dot_graph(self):
         graph = self._create_dot_graph()
-        this_node = Node(self._uuid_str, label='Resolve buttons', shape='box')
+        this_node = Node(self._uuid_str, label='Resolve Query', shape='box')
         graph.add_node(this_node)
 
         return this_node, graph
@@ -424,15 +486,8 @@ class QueryNode(BTNode):
         self._query_param = query_param
 
     def run(self, domain):
-        param_dict = json.loads(self._query_param)
-        if "traj1" in param_dict:
-            assert "traj2" in param_dict
-            assert len(self.blackboard["trajectories"]) == 2
-            param_dict["traj1"] = self.blackboard["trajectories"][-2]
-            param_dict["traj2"] = self.blackboard["trajectories"][-1]
-        self._query_param = json.dumps(param_dict)
 
-        query_id = domain.run_query(self._query_name, self._query_param)
+        query_id = domain.run_query(self._query_name, json.dumps(self._query_param))
         logger.debug(f'{self} running query {self._query_name} with id: {query_id}') 
         while True:
             query_status = domain.get_query_status(query_id)
@@ -453,9 +508,35 @@ class QueryNode(BTNode):
     def get_dot_graph(self):
         graph = self._create_dot_graph()
 
-        import json 
-        param_dict = json.loads(self._query_param)
-        param_str = '-'.join(list(param_dict.keys()))
+        param_str = 'RunQuery-'+self._query_name
+
+        this_node = Node(self._uuid_str, label=param_str, shape='box')
+        graph.add_node(this_node)
+
+        return this_node, graph
+
+class SaveImageNode(BTNode):
+
+    def __init__(self, camera_topic_name):
+        super().__init__()
+        self._camera_topic_name = camera_topic_name
+
+    def run(self, domain):
+
+        (image_request_success, image_path) = domain.save_rgb_camera_image(self._camera_topic_name) 
+        while True:
+            if image_request_success:
+                logger.debug(f'{self} to yield success')
+                yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
+            else: 
+                logger.debug(f'{self} to yield failure')
+                yield self, BTStatus.FAILURE, BTStatus.FAILURE
+            break
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+
+        param_str = 'save_rgb_camera_image-'+self._camera_topic_name
 
         this_node = Node(self._uuid_str, label=param_str, shape='box')
         graph.add_node(this_node)

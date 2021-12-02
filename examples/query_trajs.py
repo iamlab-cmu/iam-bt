@@ -8,11 +8,6 @@ from iam_bt.bt import QueryNode, While, FallBack, Sequence, NegationDecorator, C
 from iam_bt.utils import run_tree, assign_unique_name
 from iam_domain_handler.domain_client import DomainClient 
 
-class GraspPenParamSelector(SkillParamSelector):
-
-    def __call__(self, state):
-        return 'frame:box'
-
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(logging.INFO)
