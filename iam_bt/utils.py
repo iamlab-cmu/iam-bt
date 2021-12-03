@@ -17,20 +17,25 @@ def run_tree(tree, domain, save_dir=None, skip_running_nodes=True):
 
     status_gen = tree.run(domain)
     tick = 0
-    for leaf_bt_node, leaf_status, _ in status_gen:
+    for leaf_bt_nodes, leaf_statuses, _ in status_gen:
         tick += 1
 
         if save_dir is not None:
-            leaf_dot_node = graph.get_node(leaf_bt_node.uuid_str)[0]
-            if leaf_status == BTStatus.RUNNING:
-                if skip_running_nodes:
-                    continue
-                else:
-                    leaf_dot_node.set_color('goldenrod4')
-            elif leaf_status == BTStatus.SUCCESS:
-                leaf_dot_node.set_color('green')
-            elif leaf_status == BTStatus.FAILURE:
-                leaf_dot_node.set_color('red')
+            if not isinstance(leaf_bt_nodes, list):
+                leaf_bt_nodes = [leaf_bt_nodes]
+                leaf_statuses = [leaf_statuses]
+
+            for leaf_bt_node, leaf_status in zip(leaf_bt_nodes, leaf_statuses):
+                leaf_dot_node = graph.get_node(leaf_bt_node.uuid_str)[0]
+                if leaf_status == BTStatus.RUNNING:
+                    if skip_running_nodes:
+                        continue
+                    else:
+                        leaf_dot_node.set_color('goldenrod4')
+                elif leaf_status == BTStatus.SUCCESS:
+                    leaf_dot_node.set_color('green')
+                elif leaf_status == BTStatus.FAILURE:
+                    leaf_dot_node.set_color('red')
             
             img_path = save_dir / f'{tick:010d}.png'
             graph.write_png(img_path)         

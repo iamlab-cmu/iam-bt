@@ -223,6 +223,79 @@ class Sequence(BTNode):
         return this_node, graph
 
 
+class Parallel(BTNode):
+
+    def __init__(self, children, success_threshold):
+        super().__init__()
+        assert len(children) > 0
+        assert success_threshold > 0 and success_threshold <= len(children)
+        self._children = children
+        self._success_threshold = success_threshold
+
+    def run(self, domain):
+        logger.debug('run parallel')
+        
+        status_gens = [child.run(domain) for child in self._children]
+        statuses = [None] * len(self._children)
+        leaf_nodes = [None] * len(self._children)
+        leaf_statuses = [None] * len(self._children)
+        
+        n_successes = 0
+        n_failures = 0
+
+        succeeded = False
+        should_break = False
+        while True:
+            for idx, status_gen in enumerate(status_gens):
+                try:
+                    leaf_node, leaf_status, status = next(status_gen)
+                    statuses[idx] = status
+
+                    leaf_nodes[idx] = leaf_node
+                    leaf_statuses[idx] = leaf_status
+
+                    if status == BTStatus.SUCCESS:
+                        n_successes += 1
+
+                    if status == BTStatus.FAILURE:
+                        n_failures += 1
+                except StopIteration:
+                    pass
+
+                if n_successes >= self._success_threshold:
+                    succeeded = True
+                    should_break = True
+                    break
+
+                if n_failures > len(self._children) - self._success_threshold:
+                    should_break = True
+                    break
+
+            if should_break:
+                break
+
+            yield leaf_nodes, leaf_statuses, BTStatus.RUNNING
+
+        if succeeded:
+            logger.debug(f'{self} to yield success b/c {n_successes} successes')
+            yield leaf_nodes, leaf_statuses, BTStatus.SUCCESS
+        else:
+            logger.debug(f'{self} to yield failure b/c {n_failures} failures')
+            yield leaf_nodes, leaf_statuses, BTStatus.FAILURE
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+        this_node = Node(self._uuid_str, label=f'=>{self._success_threshold}', shape='square')
+        graph.add_node(this_node)
+
+        for child in self._children:
+            child_root_node, child_graph = child.get_dot_graph()
+            merge_graphs(graph, child_graph)
+            graph.add_edge(Edge(this_node, child_root_node))
+
+        return this_node, graph
+
+
 class NegationDecorator(BTNode):
 
     def __init__(self, child):
@@ -297,7 +370,6 @@ class SkillNode(BTNode):
 
     def run(self, domain):
         param = self._param_selector(domain.state)
-        trajs = domain.get_skill_traj(self._skill_name, param)
         
         skill_id = domain.run_skill(self._skill_name, param)
         

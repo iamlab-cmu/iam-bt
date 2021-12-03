@@ -111,3 +111,32 @@ class MockPenInJarDomainClient(BaseMockDomainClient):
                 if self._tick_count > skill_start_tick + 2:
                     self._skill_dict[skill_id]['status'] = 'success'        
     
+
+class MockPenInJarParallelDomainClient(BaseMockDomainClient):
+
+    def _make_init_state(self):
+        state = State()
+        state['frame:pen:pose/position'] = [0.1, 0, 0]
+        return state
+
+    def _mock_tick(self):
+        self._tick_count += 1
+
+        for skill_id, skill_info in self._skill_dict.items():
+            skill_status = skill_info['status']
+            skill_start_tick = skill_info['start_tick']
+            skill_name = skill_info['skill_name']
+            if skill_status == 'running':
+                if skill_name == 'reset':
+                    if self._tick_count > skill_start_tick + 10:
+                        self._skill_dict[skill_id]['status'] = 'success'
+                elif skill_name == 'grasp':
+                    if self._tick_count > skill_start_tick + 3:
+                        self._skill_dict[skill_id]['status'] = 'success'
+                        self._state['frame:pen:pose/position'] = [0.1, 0, 0.2]
+                elif skill_name == 'move_ee_to_pose':
+                    if self._tick_count > skill_start_tick + 4:
+                        self._skill_dict[skill_id]['status'] = 'success'
+                elif skill_name == 'open_gripper':
+                    if self._tick_count > skill_start_tick + 2:
+                        self._skill_dict[skill_id]['status'] = 'success'
