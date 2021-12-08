@@ -519,6 +519,7 @@ class ResolveQueryNode(BTNode):
                 query_response['dmp_params'] = dmp_params
             if label_image:
                 query_response = domain.get_memory_objects(['request_next_image', 'object_names', 'masks', 'bounding_boxes'])
+                query_response['button_inputs'] = {'request_next_image': query_response['request_next_image']}
             if has_points:
                 query_response = domain.get_memory_objects(['object_names', 'desired_positions'])
 

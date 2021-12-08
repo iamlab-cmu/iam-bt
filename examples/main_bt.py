@@ -162,14 +162,15 @@ if __name__ == '__main__':
                                         QueryNode('label_image', label_images_query_params),
                                         ResolveQueryNode('label_image', label_images_query_params),
                                         SaveMasksNode(),
-                                        FallBack([While([BoolConditionNode('request_next_image'), 
+                                        FallBack([While([ButtonPushedConditionNode('request_next_image'), 
                                                          Sequence([GetImageNode(),
                                                                    QueryNode('label_image', label_images_query_params),
                                                                    ResolveQueryNode('label_image', label_images_query_params),
                                                                    SaveMasksNode()
                                                                   ])
                                                         ]),
-                                        ])
+                                                  NegationDecorator(ButtonPushedConditionNode('request_next_image'))
+                                                 ])
                                        ])
 
     select_point_goals_tree = Sequence([ButtonPushedConditionNode('Select Point Goals'),
