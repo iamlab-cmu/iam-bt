@@ -4,7 +4,7 @@ import yaml
 import logging
 from pathlib import Path
 
-from iam_bt.bt import QueryNode, While, FallBack, Sequence, NegationDecorator, ConditionNode, SkillParamSelector, SkillNode, GetSkillTrajNode, ResolveQueryNode, SaveImageNode, GetImageNode
+from iam_bt.bt import QueryNode, While, FallBack, Sequence, NegationDecorator, ConditionNode, SkillParamSelector, SkillNode, GetSkillTrajNode, ResolveQueryNode, SaveImageNode, GetImageNode, Parallel, SaveMasksNode, CancelQueryNode, CancelSkillNode
 from iam_bt.utils import run_tree, assign_unique_name
 from iam_domain_handler.domain_client import DomainClient 
 
@@ -25,7 +25,7 @@ class BoolConditionNode(ConditionNode):
         self._state_field_name = state_field_name
 
     def _eval(self, state):
-        return self.blackboard[self._state_field_name]
+        return self._state_field_name == 'true' or self.blackboard[self._state_field_name]
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(logging.INFO)
@@ -68,8 +68,55 @@ if __name__ == '__main__':
         ]
     }
 
+    teach_skill_1_query_params = {
+        'instruction_text' : 'Hold onto the robot and press the Start button to Move the Robot to the Starting Position.',
+        'buttons' : [
+            {
+                'name' : 'Start',
+                'text' : '',
+            },
+            {
+                'name' : 'Cancel',
+                'text' : '',
+            },
+        ]
+    }
+
+    zero_force_skill_params = {
+        'duration' : 10,
+        'dt' : 0.01
+    }
+
+    reposition_robot_query_params = {
+        'instruction_text' : 'Move the Robot to the Starting Position and Press Done when Completed.',
+        'buttons' : [
+            {
+                'name' : 'Done',
+                'text' : '',
+            },
+            {
+                'name' : 'Cancel',
+                'text' : '',
+            },
+        ]
+    }
+
+    reposition_robot_skill_tree = Parallel([Sequence([SkillNode('zero_force', zero_force_skill_params),
+                                                      CancelQueryNode()
+                                                     ]),
+                                            Sequence([QueryNode('Teach Skill 2', reposition_robot_query_params),
+                                                      ResolveQueryNode('Teach Skill 2', reposition_robot_query_params),
+                                                      CancelSkillNode(),
+                                                     ])], 1)
+
     teach_skill_tree = Sequence([ButtonPushedConditionNode('Teach Skill'),
-                                ])
+                                 QueryNode('Teach Skill 1', teach_skill_1_query_params),
+                                 ResolveQueryNode('Teach Skill 1', teach_skill_1_query_params),
+                                 ButtonPushedConditionNode('Start'),
+                                 reposition_robot_skill_tree,
+                                 ButtonPushedConditionNode('Done'),
+
+                                 ])
 
     replay_trajectory_tree = Sequence([ButtonPushedConditionNode('Replay Trajectory'),
                                       ])
@@ -94,11 +141,14 @@ if __name__ == '__main__':
     save_images_skill_tree = Sequence([ButtonPushedConditionNode('Save Images'),
                                        QueryNode('save_images', save_images_query_params),
                                        ResolveQueryNode('save_images', save_images_query_params),
-                                       While([ButtonPushedConditionNode('Save'), 
-                                              Sequence([SaveImageNode('/rgb/image_raw'),
-                                                        QueryNode('save_images', save_images_query_params),
-                                                        ResolveQueryNode('save_images', save_images_query_params)])
-                                             ])
+                                       FallBack([While([ButtonPushedConditionNode('Save'), 
+                                                        Sequence([SaveImageNode('/rgb/image_raw'),
+                                                                  QueryNode('save_images', save_images_query_params),
+                                                                  ResolveQueryNode('save_images', save_images_query_params)
+                                                                 ])
+                                                       ]),
+                                                 ButtonPushedConditionNode('Done') 
+                                                ])
                                       ])
 
     label_images_query_params = {
@@ -111,11 +161,15 @@ if __name__ == '__main__':
                                         GetImageNode(),
                                         QueryNode('label_image', label_images_query_params),
                                         ResolveQueryNode('label_image', label_images_query_params),
-                                        While([BoolConditionNode('request_next_image'), 
-                                               Sequence([GetImageNode(),
-                                                         QueryNode('label_image', label_images_query_params),
-                                                         ResolveQueryNode('label_image', label_images_query_params)])
-                                              ])
+                                        SaveMasksNode(),
+                                        FallBack([While([BoolConditionNode('request_next_image'), 
+                                                         Sequence([GetImageNode(),
+                                                                   QueryNode('label_image', label_images_query_params),
+                                                                   ResolveQueryNode('label_image', label_images_query_params),
+                                                                   SaveMasksNode()
+                                                                  ])
+                                                        ]),
+                                        ])
                                        ])
 
     select_point_goals_tree = Sequence([ButtonPushedConditionNode('Select Point Goals'),

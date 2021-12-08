@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 class BTNode(ABC):
     # Corresponding information we want to store internally inside the BT
     blackboard = {
-        'true' : True
         # "buttons" : {},
         # "sliders" : {},
         # "bboxes" : [],
@@ -371,11 +370,11 @@ class SkillNode(BTNode):
     def run(self, domain):
         param = self._param_selector(domain.state)
         
-        skill_id = domain.run_skill(self._skill_name, param)
+        self.blackboard['skill_id'] = domain.run_skill(self._skill_name, param)
         
-        logger.debug(f'{self} running skill with {self._skill_name} on {skill_id}')
+        logger.debug(f'{self} running skill with {self._skill_name} on {self.blackboard["skill_id"]}')
         while True:
-            skill_status = domain.get_skill_status(skill_id)
+            skill_status = domain.get_skill_status(self.blackboard['skill_id'])
             if skill_status in ('running', 'registered'):
                 logger.debug(f'{self} to yield running')
                 yield self, BTStatus.RUNNING, BTStatus.RUNNING
@@ -563,10 +562,10 @@ class QueryNode(BTNode):
             if self._query_param['bokeh_display_type'] == 1:
                 self._query_param['bokeh_image'] = self.blackboard['image'].tolist()
 
-        query_id = domain.run_query(self._query_name, json.dumps(self._query_param))
-        logger.debug(f'{self} running query {self._query_name} with id: {query_id}') 
+        self.blackboard['query_id'] = domain.run_query(self._query_name, json.dumps(self._query_param))
+        logger.debug(f'{self} running query {self._query_name} with id: {self.blackboard["query_id"]}') 
         while True:
-            query_status = domain.get_query_status(query_id)
+            query_status = domain.get_query_status(self.blackboard['query_id'])
             if query_status in ('running', 'registered'):
                 logger.debug(f'{self} to yield running')
                 yield self, BTStatus.RUNNING, BTStatus.RUNNING
@@ -620,6 +619,80 @@ class SaveImageNode(BTNode):
 
         return this_node, graph
 
+class SaveMasksNode(BTNode):
+
+    def __init__(self):
+        super().__init__()
+
+    def run(self, domain):
+
+        (request_success, image_path) = domain.save_image_labels(self.blackboard['image_path'], self.blackboard['query_response']['object_names'], self.blackboard['query_response']['masks'], self.blackboard['query_response']['bounding_boxes'])
+        while True:
+            if request_success:
+                self.blackboard['image_path'] = image_path
+                logger.debug(f'{self} to yield success')
+                yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
+            else: 
+                logger.debug(f'{self} to yield failure')
+                yield self, BTStatus.FAILURE, BTStatus.FAILURE
+            break
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+
+        param_str = 'Save Image Masks'
+
+        this_node = Node(self._uuid_str, label=param_str, shape='box')
+        graph.add_node(this_node)
+
+        return this_node, graph
+
+class CancelSkillNode(BTNode):
+
+    def __init__(self):
+        super().__init__()
+
+    def run(self, domain):
+
+        if domain.get_skill_status(self.blackboard['skill_id']) == 'running':
+            domain.cancel_skill(self.blackboard['skill_id'])
+
+        logger.debug(f'{self} to yield success')
+        yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+
+        param_str = 'Cancel_Skill'
+
+        this_node = Node(self._uuid_str, label=param_str, shape='box')
+        graph.add_node(this_node)
+
+        return this_node, graph
+
+class CancelQueryNode(BTNode):
+
+    def __init__(self):
+        super().__init__()
+
+    def run(self, domain):
+
+        if domain.get_query_status(self.blackboard['query_id']) == 'running':
+            domain.cancel_query(self.blackboard['query_id'])
+
+        logger.debug(f'{self} to yield success')
+        yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+
+        param_str = 'Cancel_Query'
+
+        this_node = Node(self._uuid_str, label=param_str, shape='box')
+        graph.add_node(this_node)
+
+        return this_node, graph
+
 class GetImageNode(BTNode):
 
     def __init__(self):
@@ -629,17 +702,14 @@ class GetImageNode(BTNode):
 
         (image_request_success, image_path, image) = domain.get_rgb_image()
         print(image_request_success)
-        print(image_path)
-        while True:
-            if image_request_success:
-                self.blackboard['image'] = image
-                self.blackboard['image_path'] = image_path
-                logger.debug(f'{self} to yield success')
-                yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
-            else: 
-                logger.debug(f'{self} to yield failure')
-                yield self, BTStatus.FAILURE, BTStatus.FAILURE
-            break
+        if image_request_success:
+            self.blackboard['image'] = image
+            self.blackboard['image_path'] = image_path
+            logger.debug(f'{self} to yield success')
+            yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
+        else: 
+            logger.debug(f'{self} to yield failure')
+            yield self, BTStatus.FAILURE, BTStatus.FAILURE
 
     def get_dot_graph(self):
         graph = self._create_dot_graph()
