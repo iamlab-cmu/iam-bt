@@ -68,7 +68,7 @@ if __name__ == '__main__':
         ]
     }
 
-    teach_skill_1_query_params = {
+    reposition_robot_1_query_params = {
         'instruction_text' : 'Hold onto the robot and press the Start button to Move the Robot to the Starting Position.',
         'buttons' : [
             {
@@ -87,7 +87,7 @@ if __name__ == '__main__':
         'dt' : 0.01
     }
 
-    reposition_robot_query_params = {
+    reposition_robot_2_query_params = {
         'instruction_text' : 'Move the Robot to the Starting Position and Press Done when Completed.',
         'buttons' : [
             {
@@ -101,27 +101,82 @@ if __name__ == '__main__':
         ]
     }
 
-    reposition_robot_skill_tree = Parallel([Sequence([SkillNode('zero_force', zero_force_skill_params),
-                                                      CancelQueryNode()
-                                                     ]),
-                                            Sequence([QueryNode('Teach Skill 2', reposition_robot_query_params),
-                                                      ResolveQueryNode('Teach Skill 2', reposition_robot_query_params),
-                                                      CancelSkillNode(),
-                                                     ])], 1)
+    reposition_robot_3_query_params = {
+        'instruction_text' : 'If you are done repositioning the robot, press Done. Otherwise to continue repositioning, press Reposition.',
+        'buttons' : [
+            {
+                'name' : 'Done',
+                'text' : '',
+            },
+            {
+                'name' : 'Reposition',
+                'text' : '',
+            },
+            {
+                'name' : 'Cancel',
+                'text' : '',
+            },
+        ]
+    }
+
+    parallel_reposition_tree = Parallel([Sequence([SkillNode('zero_force', zero_force_skill_params),
+                                                   CancelQueryNode()
+                                                  ]),
+                                         Sequence([QueryNode('Reposition 2', reposition_robot_2_query_params),
+                                                   ResolveQueryNode('Reposition 2', reposition_robot_2_query_params),
+                                                   CancelSkillNode(),
+                                                  ])], 1)
+
+    reposition_robot_skill_tree = Sequence([QueryNode('Reposition 1', reposition_robot_1_query_params),
+                                            ResolveQueryNode('Reposition 1', reposition_robot_1_query_params),
+                                            FallBack([Sequence([ButtonPushedConditionNode('Start'),
+                                                                parallel_reposition_tree,
+                                                                FallBack([ButtonPushedConditionNode('Done'),
+                                                                          ButtonPushedConditionNode('Cancel'),
+                                                                          Sequence([QueryNode('Reposition 3', reposition_robot_3_query_params),
+                                                                                    ResolveQueryNode('Reposition 3', reposition_robot_3_query_params),
+                                                                                    FallBack([While([ButtonPushedConditionNode('Reposition'),
+                                                                                                     Sequence([parallel_reposition_tree,
+                                                                                                               FallBack([ButtonPushedConditionNode('Done'),
+                                                                                                                         ButtonPushedConditionNode('Cancel'),
+                                                                                                                         Sequence([QueryNode('Reposition 3', reposition_robot_3_query_params),
+                                                                                                                                   ResolveQueryNode('Reposition 3', reposition_robot_3_query_params),
+                                                                                                                                  ])
+                                                                                                                        ])
+                                                                                                              ])
+                                                                                                    ]),
+                                                                                              NegationDecorator(ButtonPushedConditionNode('Reposition'))
+                                                                                             ]),
+                                                                                   ]),
+                                                                          
+                                                                         ])
+                                                               ])
+                                                      
+                                                     ])
+                                           ])
 
     teach_skill_tree = Sequence([ButtonPushedConditionNode('Teach Skill'),
-                                 QueryNode('Teach Skill 1', teach_skill_1_query_params),
-                                 ResolveQueryNode('Teach Skill 1', teach_skill_1_query_params),
-                                 ButtonPushedConditionNode('Start'),
                                  reposition_robot_skill_tree,
-                                 ButtonPushedConditionNode('Done'),
-
-                                 ])
+                                 FallBack([Sequence([ButtonPushedConditionNode('Done'),
+                                                    ]),
+                                           ButtonPushedConditionNode('Cancel')
+                                          ])
+                                ])
 
     replay_trajectory_tree = Sequence([ButtonPushedConditionNode('Replay Trajectory'),
+                                       reposition_robot_skill_tree,
+                                       FallBack([Sequence([ButtonPushedConditionNode('Done'),
+                                                          ]),
+                                                 ButtonPushedConditionNode('Cancel')
+                                                ])
                                       ])
 
     execute_dmp_skill_tree = Sequence([ButtonPushedConditionNode('Execute DMP Skill'),
+                                       reposition_robot_skill_tree,
+                                       FallBack([Sequence([ButtonPushedConditionNode('Done'),
+                                                          ]),
+                                                 ButtonPushedConditionNode('Cancel')
+                                                ])
                                       ])
 
     save_images_query_params = {

@@ -358,19 +358,13 @@ class ConditionNode(BTNode):
 
 class SkillNode(BTNode):
 
-    def __init__(self, skill_name, param_selector=None):
+    def __init__(self, skill_name, skill_param):
         super().__init__()
         self._skill_name = skill_name
+        self._skill_param = skill_param
 
-        if param_selector is None:
-            self._param_selector = lambda _ : ''
-        else:
-            self._param_selector = param_selector
-
-    def run(self, domain):
-        param = self._param_selector(domain.state)
-        
-        self.blackboard['skill_id'] = domain.run_skill(self._skill_name, param)
+    def run(self, domain):        
+        self.blackboard['skill_id'] = domain.run_skill(self._skill_name, json.dumps(self._skill_param))
         
         logger.debug(f'{self} running skill with {self._skill_name} on {self.blackboard["skill_id"]}')
         while True:
@@ -392,11 +386,7 @@ class SkillNode(BTNode):
     def get_dot_graph(self):
         graph = self._create_dot_graph()
 
-        param_str = self._param_selector.__class__.__name__
-        if param_str == 'function':
-            param_str = ''
-
-        this_node = Node(self._uuid_str, label=f'{self._skill_name}({param_str})', shape='box')
+        this_node = Node(self._uuid_str, label=self._skill_name, shape='box')
         graph.add_node(this_node)
 
         return this_node, graph
