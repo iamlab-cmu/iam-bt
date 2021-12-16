@@ -10,6 +10,11 @@ from pillar_state import State
 from .bt_status import BTStatus
 from .utils import merge_graphs
 
+import math
+import numpy as np
+from autolab_core import RigidTransform
+from frankapy.utils import convert_rigid_transform_to_array
+
 
 logger = logging.getLogger(__name__)
 
@@ -364,6 +369,37 @@ class SkillNode(BTNode):
         self._skill_param = skill_param
 
     def run(self, domain):        
+        if self._skill_name == 'record_trajectory' and 'skill_duration' in self.blackboard.keys():
+            self._skill_param['duration'] = float(self.blackboard['skill_duration'])
+        elif self._skill_name == 'reset_arm':
+            self._skill_param['goal_joints'] = [0, -math.pi / 4, 0, -3 * math.pi / 4, 0, math.pi / 2, math.pi / 4]
+            self._skill_name = 'one_step_joint'
+        elif self._skill_name == 'go_to_start' and 'skill_name' in self.blackboard.keys():
+            self._skill_param['goal_joints'] = list(self.blackboard[self.blackboard['skill_name']]['trajectory']['skill_state_dict']['q'][0])
+            self._skill_name = 'one_step_joint'
+        elif self._skill_name == 'one_step_pose':
+            if not isinstance(self._skill_param['goal_pose'], list):
+                self._skill_param['goal_pose'] = self.blackboard['goal_poses'][self._skill_param['goal_pose']]
+        elif self._skill_name == 'replay_trajectory' and 'skill_name' in self.blackboard.keys():
+            self._skill_param['traj'] = self.blackboard[self.blackboard['skill_name']]['trajectory']['skill_state_dict']['q'].tolist()
+            self._skill_name = 'stream_joint_traj'
+        elif self._skill_name == 'execute_dmp_trajectory' and 'skill_name' in self.blackboard.keys():
+            if self.blackboard[self.blackboard['skill_name']]['dmp_params']['dmp_type'] == 0:
+                self._skill_param = {
+                    'duration' : 5,
+                    'dt' : 0.01,
+                    'position_dmp_params' : self.blackboard[self.blackboard['skill_name']]['dmp_params'],
+                    'quat_dmp_params' : self.blackboard[self.blackboard['skill_name']]['dmp_params']['quat_dmp_params']
+                }
+                self._skill_name = 'one_step_quat_pose_dmp'
+            else:
+                self._skill_param = {
+                    'duration' : 5,
+                    'dt' : 0.01,
+                    'dmp_params' : self.blackboard[self.blackboard['skill_name']]['dmp_params']
+                }
+                self._skill_name = 'one_step_joint_dmp'
+
         self.blackboard['skill_id'] = domain.run_skill(self._skill_name, json.dumps(self._skill_param))
         
         logger.debug(f'{self} running skill with {self._skill_name} on {self.blackboard["skill_id"]}')
@@ -387,51 +423,6 @@ class SkillNode(BTNode):
         graph = self._create_dot_graph()
 
         this_node = Node(self._uuid_str, label=self._skill_name, shape='box')
-        graph.add_node(this_node)
-
-        return this_node, graph
-
-class GetSkillTrajNode(BTNode):
-
-    def __init__(self, skill_name, param_selector=None):
-        super().__init__()
-        self._skill_name = skill_name
-
-        if param_selector is None:
-            self._param_selector = lambda _ : ''
-        else:
-            self._param_selector = param_selector
-
-    def run(self, domain):
-        param = self._param_selector(domain.state)
-        skill_status = domain.get_skill_traj(self._skill_name, param)
-        traj_list = self.blackboard.get("trajectories", [])
-        traj_list.append(domain.state['skill_trajectory'])
-        self.blackboard['trajectories'] = traj_list
-        logger.debug(f'{self} getting skill trajectory with {self._skill_name}')
-        while True:
-            if skill_status in ('running'):
-                logger.debug(f'{self} to yield running')
-                yield self, BTStatus.RUNNING, BTStatus.RUNNING
-            elif skill_status == 'success':
-                logger.debug(f'{self} to yield success')
-                yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
-                break
-            elif skill_status == 'failure':
-                logger.debug(f'{self} to yield failure')
-                yield self, BTStatus.FAILURE, BTStatus.FAILURE
-                break
-            else:
-                raise ValueError(f'Unknown status {skill_status}')
-
-    def get_dot_graph(self):
-        graph = self._create_dot_graph()
-
-        param_str = self._param_selector.__class__.__name__
-        if param_str == 'function':
-            param_str = ''
-
-        this_node = Node(self._uuid_str, label=f'{self._skill_name}({param_str})', shape='box')
         graph.add_node(this_node)
 
         return this_node, graph
@@ -549,10 +540,19 @@ class QueryNode(BTNode):
         self._query_param = query_param
 
     def run(self, domain):
-        if 'display_type' in self._query_param.keys() and self._query_param['display_type'] == 3:
-            if self._query_param['bokeh_display_type'] == 1:
+        if 'display_type' in self._query_param.keys() and self._query_param['display_type'] == 2:
+            self._query_param['traj1'] = list(self.blackboard['recorded_trajectory']['skill_state_dict']['q'].flatten())
+        elif 'display_type' in self._query_param.keys() and self._query_param['display_type'] == 3:
+            if self._query_param['bokeh_display_type'] == 0:
+                bokeh_traj = {}
+                bokeh_traj['time_since_skill_started'] = list(self.blackboard['recorded_trajectory']['skill_state_dict']['time_since_skill_started'])
+                bokeh_traj['num_joints'] = 7
+                bokeh_traj['cart_traj'] = list(np.array(self.blackboard['recorded_trajectory']['skill_state_dict']['O_T_EE']).flatten())
+                bokeh_traj['joint_traj'] = list(self.blackboard['recorded_trajectory']['skill_state_dict']['q'].flatten())
+                self._query_param['bokeh_traj'] = bokeh_traj
+            elif self._query_param['bokeh_display_type'] == 1 or self._query_param['bokeh_display_type'] == 2:
                 self._query_param['bokeh_image'] = self.blackboard['image'].tolist()
-
+        
         self.blackboard['query_id'] = domain.run_query(self._query_name, json.dumps(self._query_param))
         logger.debug(f'{self} running query {self._query_name} with id: {self.blackboard["query_id"]}') 
         while True:
@@ -568,6 +568,10 @@ class QueryNode(BTNode):
                 logger.debug(f'{self} to yield failure')
                 yield self, BTStatus.FAILURE, BTStatus.FAILURE
                 break
+            elif query_status == 'cancelled':
+                logger.debug(f'{self} to yield cancelled')
+                yield self, BTStatus.RUNNING, BTStatus.RUNNING
+                break
             else:
                 raise ValueError(f'Unknown status {query_status}')
 
@@ -581,18 +585,112 @@ class QueryNode(BTNode):
 
         return this_node, graph
 
-class SaveImageNode(BTNode):
+class GenerateDepthImagePathNode(BTNode):
 
-    def __init__(self, camera_topic_name):
+    def __init__(self):
         super().__init__()
-        self._camera_topic_name = camera_topic_name
+
+    def run(self, domain):
+        rgb_image_path = self.blackboard['image_path']
+        self.blackboard['depth_image_path'] = rgb_image_path[:rgb_image_path.rfind('/')+1] + 'depth_' + rgb_image_path[rgb_image_path.rfind('/')+1:]
+        logger.debug(f'{self} to yield success')
+        yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+
+        param_str = 'Generate Depth Image Path'
+
+        this_node = Node(self._uuid_str, label=param_str, shape='box')
+        graph.add_node(this_node)
+
+        return this_node, graph
+
+class GenerateGoalPointsNode(BTNode):
+
+    def __init__(self):
+        super().__init__()
+
+    def run(self, domain):
+        (goal_points_success, goal_points) = domain.get_goal_points(self.blackboard['depth_image_path'], self.blackboard['desired_positions'])
+        if goal_points_success:
+            self.blackboard['goal_points'] = goal_points
+            logger.debug(f'{self} to yield success')
+            yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
+        else: 
+            logger.debug(f'{self} to yield failure')
+            yield self, BTStatus.FAILURE, BTStatus.FAILURE
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+
+        param_str = 'Generate Goal Points'
+
+        this_node = Node(self._uuid_str, label=param_str, shape='box')
+        graph.add_node(this_node)
+
+        return this_node, graph
+
+class GeneratePickAndPlacePositionsNode(BTNode):
+
+    def __init__(self):
+        super().__init__()
 
     def run(self, domain):
 
-        (image_request_success, image_path) = domain.save_rgb_camera_image(self._camera_topic_name) 
+        goal_pose_1 = self.blackboard['goal_points'][0]
+        goal_pose_1.y -= 0.04
+        intermediate_height_offset = 0.11
+        tong_height = 0.22
+        intermediate_pose = RigidTransform(rotation=np.array([
+            [1, 0, 0],
+            [0, -1, 0],
+            [0, 0, -1],
+        ]), translation=np.array([goal_pose_1.x, goal_pose_1.y, tong_height+intermediate_height_offset]))
+
+        grasp_pose = RigidTransform(rotation=np.array([
+            [1, 0, 0],
+            [0, -1, 0],
+            [0, 0, -1],
+        ]), translation=np.array([goal_pose_1.x, goal_pose_1.y, tong_height]))
+
+        self.blackboard['goal_poses'] = { 'intermediate' : list(convert_rigid_transform_to_array(intermediate_pose)),
+                                          'grasp' : list(convert_rigid_transform_to_array(grasp_pose))
+                                        }
+
+        logger.debug(f'{self} to yield success')
+        yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+
+        param_str = 'Generate Pick and Place Positions'
+
+        this_node = Node(self._uuid_str, label=param_str, shape='box')
+        graph.add_node(this_node)
+
+        return this_node, graph
+
+class SaveImageNode(BTNode):
+
+    def __init__(self, camera_topic_name, camera_type, save_image_path_flag, use_saved_image_path_flag):
+        super().__init__()
+        self._camera_topic_name = camera_topic_name
+        self._camera_type = camera_type
+        self._save_image_path_flag = save_image_path_flag
+        self._use_saved_image_path_flag = use_saved_image_path_flag
+
+    def run(self, domain):
+        if self._camera_type == 'rgb':
+            (image_request_success, image_path) = domain.save_rgb_camera_image(self._camera_topic_name)
+        elif self._camera_type == 'depth':
+            if self._use_saved_image_path_flag:
+                (image_request_success, image_path) = domain.save_depth_camera_image(self._camera_topic_name, self.blackboard['depth_image_path'])
+
         while True:
             if image_request_success:
-                self.blackboard['image_path'] = image_path
+                if self._save_image_path_flag:
+                    self.blackboard['image_path'] = image_path
                 logger.debug(f'{self} to yield success')
                 yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
             else: 
@@ -632,6 +730,145 @@ class SaveMasksNode(BTNode):
         graph = self._create_dot_graph()
 
         param_str = 'Save Image Masks'
+
+        this_node = Node(self._uuid_str, label=param_str, shape='box')
+        graph.add_node(this_node)
+
+        return this_node, graph
+
+class SaveTextInputToBlackBoardNode(BTNode):
+
+    def __init__(self, text_input_name, blackboard_key):
+        super().__init__()
+        self._text_input_name = text_input_name
+        self._blackboard_key = blackboard_key 
+
+    def run(self, domain):
+
+        self.blackboard[self._blackboard_key] = self.blackboard['query_response']['text_inputs'][self._text_input_name]
+        logger.debug(f'{self} to yield success')
+        yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+
+        param_str = 'Save ' + self._text_input_name + ' To Blackboard'
+
+        this_node = Node(self._uuid_str, label=param_str, shape='box')
+        graph.add_node(this_node)
+
+        return this_node, graph
+
+class SaveQueryItemToBlackBoardNode(BTNode):
+
+    def __init__(self, query_item_name, blackboard_key):
+        super().__init__()
+        self._query_item_name = query_item_name
+        self._blackboard_key = blackboard_key 
+
+    def run(self, domain):
+
+        self.blackboard[self._blackboard_key] = self.blackboard['query_response'][self._query_item_name]
+        logger.debug(f'{self} to yield success')
+        yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+
+        param_str = 'Save ' + self._query_item_name + ' To Blackboard'
+
+        this_node = Node(self._uuid_str, label=param_str, shape='box')
+        graph.add_node(this_node)
+
+        return this_node, graph
+
+class SaveTrajectoryInfoToMemoryNode(BTNode):
+
+    def __init__(self):
+        super().__init__()
+
+    def run(self, domain):
+        self.blackboard['recorded_trajectory']['duration'] = self.blackboard['skill_duration']
+        domain.set_memory_objects({self.blackboard['skill_name'] : {'trajectory' : self.blackboard['recorded_trajectory'], 
+                                                                    'dmp_params' : self.blackboard['query_response']['dmp_params']}})
+        logger.debug(f'{self} to yield success')
+        yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+
+        param_str = 'Save Trajectory Info To Memory'
+
+        this_node = Node(self._uuid_str, label=param_str, shape='box')
+        graph.add_node(this_node)
+
+        return this_node, graph
+
+class SaveMemoryToBlackBoardNode(BTNode):
+
+    def __init__(self, memory_name, blackboard_key):
+        super().__init__()
+        self._memory_name = memory_name
+        self._blackboard_key = blackboard_key 
+
+    def run(self, domain):
+
+        if self._memory_name[0] == '<' and self._memory_name[-1] == '>':
+            self._memory_name = self.blackboard[self._memory_name[1:-1]]
+        if self._blackboard_key[0] == '<' and self._blackboard_key[-1] == '>':
+            self._blackboard_key = self.blackboard[self._blackboard_key[1:-1]]
+
+        self.blackboard[self._blackboard_key] = domain.get_memory_objects([self._memory_name])[self._memory_name]
+        logger.debug(f'{self} to yield success')
+        yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+
+        param_str = 'Save ' + self._memory_name + ' To Blackboard'
+
+        this_node = Node(self._uuid_str, label=param_str, shape='box')
+        graph.add_node(this_node)
+
+        return this_node, graph
+
+class ClearMemoryNode(BTNode):
+
+    def __init__(self, memory_name):
+        super().__init__()
+        self._memory_name = memory_name
+
+    def run(self, domain):
+
+        domain.clear_memory([self._memory_name])
+        logger.debug(f'{self} to yield success')
+        yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+
+        param_str = 'Clear ' + self._memory_name + ' From Memory'
+
+        this_node = Node(self._uuid_str, label=param_str, shape='box')
+        graph.add_node(this_node)
+
+        return this_node, graph
+
+class ClearBlackBoardNode(BTNode):
+
+    def __init__(self):
+        super().__init__()
+
+    def run(self, domain):
+
+        self.blackboard = {}
+        logger.debug(f'{self} to yield success')
+        yield self, BTStatus.SUCCESS, BTStatus.SUCCESS
+
+    def get_dot_graph(self):
+        graph = self._create_dot_graph()
+
+        param_str = 'Clear Blackboard'
 
         this_node = Node(self._uuid_str, label=param_str, shape='box')
         graph.add_node(this_node)
@@ -686,13 +923,16 @@ class CancelQueryNode(BTNode):
 
 class GetImageNode(BTNode):
 
-    def __init__(self):
+    def __init__(self, use_saved_image_path_flag):
         super().__init__()
+        self._use_saved_image_path_flag = use_saved_image_path_flag
 
     def run(self, domain):
+        if self._use_saved_image_path_flag:
+            (image_request_success, image_path, image) = domain.get_rgb_image(self.blackboard['image_path'])
+        else:
+            (image_request_success, image_path, image) = domain.get_rgb_image()
 
-        (image_request_success, image_path, image) = domain.get_rgb_image()
-        print(image_request_success)
         if image_request_success:
             self.blackboard['image'] = image
             self.blackboard['image_path'] = image_path
